@@ -25,41 +25,41 @@ This creates two binaries in `bin/`:
 
 1. **Start the daemon:**
    ```bash
-   ./bin/map up
+   map up
    # Or run in foreground for debugging:
-   ./bin/map up -f
+   map up -f
    ```
 
 2. **Spawn agents:**
    ```bash
    # Spawn a Claude agent (default)
-   ./bin/map agent create
+   map agent create
 
    # Spawn a Codex agent
-   ./bin/map agent create -a codex
+   map agent create -a codex
 
    # Spawn with a prompt
-   ./bin/map agent create -p "Fix the bug in auth.go"
+   map agent create -p "Fix the bug in auth.go"
 
    # Spawn multiple Codex agents
-   ./bin/map agent create -n 3 -a codex
+   map agent create -n 3 -a codex
    ```
 
 3. **Monitor agents:**
    ```bash
    # List spawned agents
-   ./bin/map agent list
+   map agent list
 
    # Watch agent output in real-time
-   ./bin/map agent watch
+   map agent watch
 
    # List worktrees
-   ./bin/map worktree ls
+   map worktree ls
    ```
 
 4. **Stop the daemon:**
    ```bash
-   ./bin/map down
+   map down
    ```
 
 ## CLI Commands
@@ -127,36 +127,36 @@ Names are automatically generated and guaranteed unique within a session.
 
 ```bash
 # Spawn a Claude agent (default)
-./bin/map agent create
+map agent create
 
 # Spawn a Codex agent
-./bin/map agent create -a codex
+map agent create -a codex
 
 # Spawn 3 Claude agents in parallel
-./bin/map agent create -n 3
+map agent create -n 3
 
 # Spawn 3 Codex agents in parallel
-./bin/map agent create -n 3 -a codex
+map agent create -n 3 -a codex
 
 # Spawn with a specific prompt
-./bin/map agent create -p "Fix the bug in auth.go"
-./bin/map agent create -a codex -p "Implement the login feature"
+map agent create -p "Fix the bug in auth.go"
+map agent create -a codex -p "Implement the login feature"
 
 # Spawn without worktree isolation (agents share working directory)
-./bin/map agent create --no-worktree
+map agent create --no-worktree
 ```
 
 ### Agent Management
 
 ```bash
 # List all spawned agents
-./bin/map agent list
+map agent list
 
 # Kill a specific agent
-./bin/map agent kill claude-abc123
+map agent kill claude-abc123
 
 # Force kill (SIGKILL instead of SIGTERM)
-./bin/map agent kill claude-abc123 --force
+map agent kill claude-abc123 --force
 ```
 
 ### Worktree Management
@@ -171,13 +171,13 @@ This is safe because the worktree is an isolated copy created by MAP. When using
 
 ```bash
 # List all worktrees
-./bin/map worktree ls
+map worktree ls
 
 # Clean up orphaned worktrees (agents that have exited)
-./bin/map worktree cleanup
+map worktree cleanup
 
 # Clean up all worktrees
-./bin/map worktree cleanup --all
+map worktree cleanup --all
 ```
 
 ### Merging Agent Changes
@@ -186,16 +186,16 @@ When an agent completes work in its worktree, use `map agent merge` to bring tho
 
 ```bash
 # Merge an agent's changes into your current branch
-./bin/map agent merge <agent-id>
+map agent merge <agent-id>
 
 # Merge with a custom commit message for uncommitted changes
-./bin/map agent merge <agent-id> -m "Agent completed feature X"
+map agent merge <agent-id> -m "Agent completed feature X"
 
 # Squash all agent commits into one
-./bin/map agent merge <agent-id> --squash
+map agent merge <agent-id> --squash
 
 # Stage changes without committing (for manual review)
-./bin/map agent merge <agent-id> --no-commit
+map agent merge <agent-id> --no-commit
 ```
 
 The merge command will:
@@ -214,19 +214,19 @@ Tasks follow this lifecycle: `PENDING → OFFERED → ACCEPTED → IN_PROGRESS �
 
 ```bash
 # Submit a new task
-./bin/map task submit "Fix the authentication bug in login.go"
+map task submit "Fix the authentication bug in login.go"
 
 # Submit with scope paths (limits where agent can work)
-./bin/map task submit "Update API handlers" -p ./internal/api -p ./internal/handlers
+map task submit "Update API handlers" -p ./internal/api -p ./internal/handlers
 
 # List all tasks
-./bin/map task ls
+map task ls
 
 # Show task details
-./bin/map task show <task-id>
+map task show <task-id>
 
 # Cancel a task
-./bin/map task cancel <task-id>
+map task cancel <task-id>
 ```
 
 ## Event Streaming
@@ -235,7 +235,7 @@ Watch real-time events from the daemon:
 
 ```bash
 # Stream all daemon events
-./bin/map watch
+map watch
 ```
 
 Events include task lifecycle changes (created, offered, accepted, started, completed, failed, cancelled) and agent status updates.
