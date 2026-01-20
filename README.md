@@ -4,6 +4,8 @@
 
 A tool for spawning and managing multiple AI coding agents (Claude Code and OpenAI Codex) with a Docker-like architecture: thin CLI (`map`) + local daemon (`mapd`).
 
+https://github.com/user-attachments/assets/1e0f02fe-fdbb-4cf7-bff4-a2161662b7a2
+
 ## Overview
 
 MAP (Multi-Agent Platform) provides infrastructure for spawning and coordinating multiple AI coding agents. It supports both **Claude Code** and **OpenAI Codex** agents. The architecture separates concerns:
