@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package map.v1;
+
+option go_package = "github.com/pmarsceill/mapcli/proto/map/v1;mapv1";
+
+import "google/protobuf/timestamp.proto";
+
+// TaskStatus represents the lifecycle state of a task
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_PENDING = 1;
+  TASK_STATUS_OFFERED = 2;
+  TASK_STATUS_ACCEPTED = 3;
+  TASK_STATUS_IN_PROGRESS = 4;
+  TASK_STATUS_COMPLETED = 5;
+  TASK_STATUS_FAILED = 6;
+  TASK_STATUS_CANCELLED = 7;
+}
+
+// EventType categorizes system events
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  EVENT_TYPE_TASK_CREATED = 1;
+  EVENT_TYPE_TASK_OFFERED = 2;
+  EVENT_TYPE_TASK_ACCEPTED = 3;
+  EVENT_TYPE_TASK_STARTED = 4;
+  EVENT_TYPE_TASK_COMPLETED = 5;
+  EVENT_TYPE_TASK_FAILED = 6;
+  EVENT_TYPE_TASK_CANCELLED = 7;
+}
+
+// Task represents a unit of work to be assigned to an agent
+message Task {
+  string task_id = 1;
+  string description = 2;
+  repeated string scope_paths = 3;
+  TaskStatus status = 4;
+  string assigned_to = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  string result = 8;
+  string error = 9;
+}
+
+// TaskEvent contains task-related event data
+message TaskEvent {
+  string task_id = 1;
+  TaskStatus old_status = 2;
+  TaskStatus new_status = 3;
+  string agent_id = 4;
+}
+
+// StatusEvent contains general status information
+message StatusEvent {
+  string message = 1;
+}
+
+// Event represents a system event for real-time streaming
+message Event {
+  string event_id = 1;
+  EventType type = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  oneof payload {
+    TaskEvent task = 4;
+    StatusEvent status = 5;
+  }
+}

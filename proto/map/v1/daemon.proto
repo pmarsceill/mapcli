@@ -1,0 +1,214 @@
+syntax = "proto3";
+
+package map.v1;
+
+option go_package = "github.com/pmarsceill/mapcli/proto/map/v1;mapv1";
+
+import "google/protobuf/timestamp.proto";
+import "map/v1/types.proto";
+
+// DaemonService is the API exposed by mapd for CLI clients
+service DaemonService {
+  // Task management
+  rpc SubmitTask(SubmitTaskRequest) returns (SubmitTaskResponse);
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
+  rpc CancelTask(CancelTaskRequest) returns (CancelTaskResponse);
+
+  // Daemon control
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+
+  // Real-time event streaming
+  rpc WatchEvents(WatchEventsRequest) returns (stream Event);
+
+  // Spawned agent management
+  rpc SpawnAgent(SpawnAgentRequest) returns (SpawnAgentResponse);
+  rpc KillAgent(KillAgentRequest) returns (KillAgentResponse);
+  rpc ListSpawnedAgents(ListSpawnedAgentsRequest) returns (ListSpawnedAgentsResponse);
+  rpc RespawnAgent(RespawnAgentRequest) returns (RespawnAgentResponse);
+
+  // Worktree management
+  rpc ListWorktrees(ListWorktreesRequest) returns (ListWorktreesResponse);
+  rpc CleanupWorktrees(CleanupWorktreesRequest) returns (CleanupWorktreesResponse);
+}
+
+// SubmitTaskRequest creates a new task
+message SubmitTaskRequest {
+  string description = 1;
+  repeated string scope_paths = 2;
+  // Optional: target specific agent
+  string target_agent_id = 3;
+}
+
+// SubmitTaskResponse returns the created task
+message SubmitTaskResponse {
+  Task task = 1;
+}
+
+// ListTasksRequest filters for listing tasks
+message ListTasksRequest {
+  // Optional filter by status
+  TaskStatus status_filter = 1;
+  // Optional filter by assigned agent
+  string agent_filter = 2;
+  // Limit number of results (0 = no limit)
+  int32 limit = 3;
+}
+
+// ListTasksResponse contains the list of tasks
+message ListTasksResponse {
+  repeated Task tasks = 1;
+}
+
+// GetTaskRequest retrieves a specific task
+message GetTaskRequest {
+  string task_id = 1;
+}
+
+// GetTaskResponse returns the task details
+message GetTaskResponse {
+  Task task = 1;
+}
+
+// CancelTaskRequest cancels a pending or in-progress task
+message CancelTaskRequest {
+  string task_id = 1;
+}
+
+// CancelTaskResponse confirms task cancellation
+message CancelTaskResponse {
+  Task task = 1;
+}
+
+// ShutdownRequest asks the daemon to shut down
+message ShutdownRequest {
+  // Force immediate shutdown without waiting for tasks
+  bool force = 1;
+}
+
+// ShutdownResponse confirms shutdown initiated
+message ShutdownResponse {
+  string message = 1;
+}
+
+// GetStatusRequest retrieves daemon status
+message GetStatusRequest {}
+
+// GetStatusResponse returns daemon status
+message GetStatusResponse {
+  bool running = 1;
+  google.protobuf.Timestamp started_at = 2;
+  int32 connected_agents = 3;
+  int32 pending_tasks = 4;
+  int32 active_tasks = 5;
+}
+
+// WatchEventsRequest configures event streaming
+message WatchEventsRequest {
+  // Filter by event types (empty = all events)
+  repeated EventType type_filter = 1;
+  // Filter by agent ID
+  string agent_filter = 2;
+  // Filter by task ID
+  string task_filter = 3;
+}
+
+// --- Spawned Agent Messages ---
+
+// SpawnAgentRequest requests spawning Claude Code agents
+message SpawnAgentRequest {
+  // Number of agents to spawn (default: 1)
+  int32 count = 1;
+  // Git branch for worktrees (empty = current branch)
+  string branch = 2;
+  // Whether to create worktree isolation
+  bool use_worktree = 3;
+  // Agent name prefix (default: "claude")
+  string name_prefix = 4;
+  // Initial prompt to send to Claude
+  string prompt = 5;
+  // Agent type: "claude" (default) or "codex"
+  string agent_type = 6;
+}
+
+// SpawnAgentResponse returns info about spawned agents
+message SpawnAgentResponse {
+  repeated SpawnedAgentInfo agents = 1;
+}
+
+// SpawnedAgentInfo describes a spawned agent
+message SpawnedAgentInfo {
+  string agent_id = 1;
+  string worktree_path = 2;
+  int32 pid = 3;
+  string status = 4;
+  google.protobuf.Timestamp created_at = 5;
+  string log_file = 6;
+  // Agent type: "claude" or "codex"
+  string agent_type = 7;
+}
+
+// KillAgentRequest requests termination of a spawned agent
+message KillAgentRequest {
+  string agent_id = 1;
+  // Force kill (SIGKILL instead of SIGTERM)
+  bool force = 2;
+}
+
+// KillAgentResponse confirms agent termination
+message KillAgentResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ListSpawnedAgentsRequest requests list of spawned agents
+message ListSpawnedAgentsRequest {}
+
+// ListSpawnedAgentsResponse returns spawned agents
+message ListSpawnedAgentsResponse {
+  repeated SpawnedAgentInfo agents = 1;
+}
+
+// RespawnAgentRequest requests restarting claude in a dead agent pane
+message RespawnAgentRequest {
+  string agent_id = 1;
+}
+
+// RespawnAgentResponse confirms respawn
+message RespawnAgentResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// --- Worktree Messages ---
+
+// ListWorktreesRequest requests list of worktrees
+message ListWorktreesRequest {}
+
+// ListWorktreesResponse returns worktree info
+message ListWorktreesResponse {
+  repeated WorktreeInfo worktrees = 1;
+}
+
+// WorktreeInfo describes a git worktree
+message WorktreeInfo {
+  string agent_id = 1;
+  string path = 2;
+  string branch = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// CleanupWorktreesRequest requests worktree cleanup
+message CleanupWorktreesRequest {
+  // Specific agent ID to cleanup (empty = all orphaned)
+  string agent_id = 1;
+  // Remove all worktrees
+  bool all = 2;
+}
+
+// CleanupWorktreesResponse confirms cleanup
+message CleanupWorktreesResponse {
+  int32 removed_count = 1;
+  repeated string removed_paths = 2;
+}
