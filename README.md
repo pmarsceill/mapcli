@@ -1,5 +1,7 @@
 # MAP CLI
 
+[![CI](https://github.com/pmarsceill/mapcli/actions/workflows/ci.yml/badge.svg)](https://github.com/pmarsceill/mapcli/actions/workflows/ci.yml)
+
 A tool for spawning and managing multiple AI coding agents (Claude Code and OpenAI Codex) with a Docker-like architecture: thin CLI (`map`) + local daemon (`mapd`).
 
 ## Overview
