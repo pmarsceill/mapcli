@@ -64,10 +64,18 @@ This creates two binaries in `bin/`:
 
 ## CLI Commands
 
+### Daemon Control
+
 | Command | Description |
 |---------|-------------|
 | `map up [-f]` | Start the daemon (foreground with -f) |
 | `map down` | Stop the daemon |
+| `map watch` | Stream real-time events from the daemon |
+
+### Agent Management
+
+| Command | Description |
+|---------|-------------|
 | `map agents` | List spawned agents (alias: `map ag`) |
 | `map agent create [-a type]` | Spawn agents (claude or codex) |
 | `map agent list` | List spawned agents (same as `map agents`) |
@@ -75,8 +83,23 @@ This creates two binaries in `bin/`:
 | `map agent watch [id]` | Attach to agent's tmux session |
 | `map agent watch -a` | Watch all agents in tiled tmux view |
 | `map agent respawn <id>` | Restart agent in dead tmux pane |
+| `map agent merge <id>` | Merge agent's worktree changes into current branch |
+
+### Worktree Management
+
+| Command | Description |
+|---------|-------------|
 | `map worktree ls` | List agent worktrees |
 | `map worktree cleanup` | Remove orphaned worktrees |
+
+### Task Management
+
+| Command | Description |
+|---------|-------------|
+| `map task submit <description>` | Submit a new task for agent processing |
+| `map task ls` | List all tasks with status |
+| `map task show <id>` | Show detailed task information |
+| `map task cancel <id>` | Cancel a pending or in-progress task |
 
 ## Spawning Agents
 
@@ -90,6 +113,15 @@ MAP supports two agent types via the `-a` flag:
 |------|-----|-------------|
 | `claude` | Claude Code | Anthropic's Claude Code CLI (default) |
 | `codex` | OpenAI Codex | OpenAI's Codex CLI |
+
+### Agent Naming
+
+Each agent receives a unique, human-friendly name based on its type:
+
+- **Claude agents**: French-style names (e.g., `jacques-bernard`, `marie-claire`, `philippe-martin`)
+- **Codex agents**: California-style names (e.g., `chad-stevenson`, `bryce-anderson`, `tyler-johnson`)
+
+Names are automatically generated and guaranteed unique within a session.
 
 ### Basic Usage
 
@@ -147,6 +179,66 @@ This is safe because the worktree is an isolated copy created by MAP. When using
 # Clean up all worktrees
 ./bin/map worktree cleanup --all
 ```
+
+### Merging Agent Changes
+
+When an agent completes work in its worktree, use `map agent merge` to bring those changes back to your main branch:
+
+```bash
+# Merge an agent's changes into your current branch
+./bin/map agent merge <agent-id>
+
+# Merge with a custom commit message for uncommitted changes
+./bin/map agent merge <agent-id> -m "Agent completed feature X"
+
+# Squash all agent commits into one
+./bin/map agent merge <agent-id> --squash
+
+# Stage changes without committing (for manual review)
+./bin/map agent merge <agent-id> --no-commit
+```
+
+The merge command will:
+1. Commit any uncommitted changes in the agent's worktree (if any)
+2. Merge those changes into your current branch
+
+## Task Management
+
+MAP includes a task routing system for distributing work to agents.
+
+### Task Lifecycle
+
+Tasks follow this lifecycle: `PENDING → OFFERED → ACCEPTED → IN_PROGRESS → COMPLETED/FAILED/CANCELLED`
+
+### Task Commands
+
+```bash
+# Submit a new task
+./bin/map task submit "Fix the authentication bug in login.go"
+
+# Submit with scope paths (limits where agent can work)
+./bin/map task submit "Update API handlers" -p ./internal/api -p ./internal/handlers
+
+# List all tasks
+./bin/map task ls
+
+# Show task details
+./bin/map task show <task-id>
+
+# Cancel a task
+./bin/map task cancel <task-id>
+```
+
+## Event Streaming
+
+Watch real-time events from the daemon:
+
+```bash
+# Stream all daemon events
+./bin/map watch
+```
+
+Events include task lifecycle changes (created, offered, accepted, started, completed, failed, cancelled) and agent status updates.
 
 ### Agent Create Options
 
@@ -278,6 +370,20 @@ make generate       # Regenerate proto files
 | `make rebuild` | Clean, generate, and build |
 | `make deps` | Download and tidy dependencies |
 | `make install-tools` | Install protoc plugins |
+| `make dev` | Hot reload development mode (requires Air) |
+
+### Linting
+
+Run the linter before submitting changes:
+
+```bash
+golangci-lint run --timeout=5m
+```
+
+Common issues to watch for:
+- **errcheck**: Always handle error return values (use `_ = fn()` for intentionally ignored errors)
+- **staticcheck**: Avoid deprecated functions
+- For deferred close operations: `defer func() { _ = x.Close() }()`
 
 ### Development Helpers
 
