@@ -128,8 +128,8 @@ func runAgentCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("spawned %d agent(s):\n\n", len(resp.Agents))
-	fmt.Printf("%-25s %-8s %-15s %s\n", "AGENT ID", "TYPE", "STATUS", "WORKTREE")
-	fmt.Println(strings.Repeat("-", 90))
+	fmt.Printf("%-25s %-8s %s\n", "AGENT ID", "TYPE", "WORKTREE")
+	fmt.Println(strings.Repeat("-", 75))
 
 	for _, agent := range resp.Agents {
 		worktreePath := agent.WorktreePath
@@ -140,10 +140,9 @@ func runAgentCreate(cmd *cobra.Command, args []string) error {
 		if agentTypeDisplay == "" {
 			agentTypeDisplay = "claude"
 		}
-		fmt.Printf("%-25s %-8s %-15s %s\n",
+		fmt.Printf("%-25s %-8s %s\n",
 			truncate(agent.AgentId, 25),
 			agentTypeDisplay,
-			truncate(agent.Status, 15),
 			worktreePath,
 		)
 	}
