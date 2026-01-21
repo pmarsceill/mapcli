@@ -116,7 +116,7 @@ main() {
 
     # Verify installation
     if "$INSTALL_DIR/map" --version > /dev/null 2>&1; then
-        info "Installation verified: $($INSTALL_DIR/map --version)"
+        info "Installation verified: $("$INSTALL_DIR"/map --version)"
     else
         warn "Installation completed but verification failed"
     fi
