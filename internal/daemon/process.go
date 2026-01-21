@@ -192,14 +192,23 @@ func (m *ProcessManager) ExecuteTask(ctx context.Context, agentID string, taskID
 	}
 
 	// Send the prompt to the tmux session
-	// Escape any single quotes in the prompt
-	escapedPrompt := strings.ReplaceAll(prompt, "'", "'\"'\"'")
+	// Replace newlines with spaces to keep as single-line input for the CLI
+	singleLinePrompt := strings.ReplaceAll(prompt, "\n", " ")
+	singleLinePrompt = strings.ReplaceAll(singleLinePrompt, "  ", " ") // collapse double spaces
 
-	// Use tmux send-keys to send the prompt
-	cmd := exec.CommandContext(ctx, "tmux", "send-keys", "-t", tmuxSession, escapedPrompt, "Enter")
+	// Use tmux send-keys with -l (literal) flag to send text, then Enter separately
+	// This ensures the text is sent exactly as-is without tmux interpreting special chars
+	cmd := exec.CommandContext(ctx, "tmux", "send-keys", "-t", tmuxSession, "-l", singleLinePrompt)
 	if err := cmd.Run(); err != nil {
-		log.Printf("agent %s task %s failed to send: %v", agentID, taskID, err)
+		log.Printf("agent %s task %s failed to send text: %v", agentID, taskID, err)
 		return "", fmt.Errorf("failed to send task to tmux: %w", err)
+	}
+
+	// Send Enter key to submit the prompt
+	cmd = exec.CommandContext(ctx, "tmux", "send-keys", "-t", tmuxSession, "Enter")
+	if err := cmd.Run(); err != nil {
+		log.Printf("agent %s task %s failed to send Enter: %v", agentID, taskID, err)
+		return "", fmt.Errorf("failed to submit task to tmux: %w", err)
 	}
 
 	log.Printf("agent %s task %s sent to tmux session", agentID, taskID)
@@ -400,12 +409,22 @@ func (m *ProcessManager) Spawn(agentID, workdir, prompt, agentType string, skipP
 		// Give the agent a moment to start up
 		time.Sleep(500 * time.Millisecond)
 
-		escapedPrompt := strings.ReplaceAll(prompt, "'", "'\"'\"'")
-		cmd := exec.Command("tmux", "send-keys", "-t", slot.TmuxSession, escapedPrompt, "Enter")
+		// Replace newlines with spaces to keep as single-line input
+		singleLinePrompt := strings.ReplaceAll(prompt, "\n", " ")
+		singleLinePrompt = strings.ReplaceAll(singleLinePrompt, "  ", " ")
+
+		// Send text with -l (literal) flag, then Enter separately
+		cmd := exec.Command("tmux", "send-keys", "-t", slot.TmuxSession, "-l", singleLinePrompt)
 		if err := cmd.Run(); err != nil {
-			log.Printf("warning: failed to send initial prompt to %s: %v", agentID, err)
+			log.Printf("warning: failed to send initial prompt text to %s: %v", agentID, err)
 		} else {
-			log.Printf("sent initial prompt to agent %s", agentID)
+			// Send Enter to submit
+			cmd = exec.Command("tmux", "send-keys", "-t", slot.TmuxSession, "Enter")
+			if err := cmd.Run(); err != nil {
+				log.Printf("warning: failed to send Enter to %s: %v", agentID, err)
+			} else {
+				log.Printf("sent initial prompt to agent %s", agentID)
+			}
 		}
 	}
 
