@@ -89,35 +89,30 @@ func (r *TaskRouter) executeOnSpawnedAgent(task *mapv1.Task, slot *AgentSlot) {
 	task.AssignedTo = slot.AgentID
 	r.emitTaskEvent(mapv1.EventType_EVENT_TYPE_TASK_STARTED, task, slot.AgentID)
 
-	// Execute asynchronously
+	// Execute asynchronously - send prompt to tmux session
+	// Task remains in_progress since we can't know when the agent finishes
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
 
-		result, err := r.spawned.ExecuteTask(ctx, slot.AgentID, task.TaskId, task.Description, task.ScopePaths)
+		_, err := r.spawned.ExecuteTask(ctx, slot.AgentID, task.TaskId, task.Description, task.ScopePaths)
 
-		// Update task with result
-		record, _ := r.store.GetTask(task.TaskId)
-		if record == nil {
-			return
-		}
-
-		record.UpdatedAt = time.Now()
+		// Only update task if sending to tmux failed
 		if err != nil {
+			record, _ := r.store.GetTask(task.TaskId)
+			if record == nil {
+				return
+			}
+
+			record.UpdatedAt = time.Now()
 			record.Status = "failed"
 			record.Error = err.Error()
 			_ = r.store.UpdateTask(record)
 
 			protoTask := taskRecordToProto(record)
 			r.emitTaskEvent(mapv1.EventType_EVENT_TYPE_TASK_FAILED, protoTask, slot.AgentID)
-		} else {
-			record.Status = "completed"
-			record.Result = result
-			_ = r.store.UpdateTask(record)
-
-			protoTask := taskRecordToProto(record)
-			r.emitTaskEvent(mapv1.EventType_EVENT_TYPE_TASK_COMPLETED, protoTask, slot.AgentID)
 		}
+		// Task stays in_progress - user can manually complete/cancel via CLI
 	}()
 }
 
