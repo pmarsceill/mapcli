@@ -71,6 +71,7 @@ func init() {
 	agentCreateCmd.Flags().String("name", "", "Agent name prefix (default: agent type)")
 	agentCreateCmd.Flags().StringP("prompt", "p", "", "Initial prompt to send to the agent")
 	agentCreateCmd.Flags().StringP("agent-type", "a", "claude", "Agent type: claude (default) or codex")
+	agentCreateCmd.Flags().Bool("require-permissions", false, "Require permission prompts (default: permissions are skipped for autonomous operation)")
 
 	// agent kill flags
 	agentKillCmd.Flags().BoolP("force", "f", false, "Force kill (SIGKILL instead of SIGTERM)")
@@ -90,6 +91,7 @@ func runAgentCreate(cmd *cobra.Command, args []string) error {
 	name, _ := cmd.Flags().GetString("name")
 	prompt, _ := cmd.Flags().GetString("prompt")
 	agentType, _ := cmd.Flags().GetString("agent-type")
+	requirePermissions, _ := cmd.Flags().GetBool("require-permissions")
 
 	// Validate agent type
 	if agentType != "claude" && agentType != "codex" {
@@ -99,16 +101,20 @@ func runAgentCreate(cmd *cobra.Command, args []string) error {
 	// no-worktree overrides worktree
 	useWorktree := worktree && !noWorktree
 
+	// Skip permissions by default for autonomous operation (inverted from require-permissions flag)
+	skipPermissions := !requirePermissions
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	req := &mapv1.SpawnAgentRequest{
-		Count:       int32(count),
-		Branch:      branch,
-		UseWorktree: useWorktree,
-		NamePrefix:  name,
-		Prompt:      prompt,
-		AgentType:   agentType,
+		Count:           int32(count),
+		Branch:          branch,
+		UseWorktree:     useWorktree,
+		NamePrefix:      name,
+		Prompt:          prompt,
+		AgentType:       agentType,
+		SkipPermissions: skipPermissions,
 	}
 
 	resp, err := c.SpawnAgent(ctx, req)

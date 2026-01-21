@@ -130,6 +130,11 @@ message SpawnAgentRequest {
   string prompt = 5;
   // Agent type: "claude" (default) or "codex"
   string agent_type = 6;
+  // Skip permission prompts so tasks execute immediately without user intervention
+  // For claude: uses --dangerously-skip-permissions
+  // For codex: uses --dangerously-bypass-approvals-and-sandbox
+  // Default: true (agents work autonomously)
+  bool skip_permissions = 7;
 }
 
 // SpawnAgentResponse returns info about spawned agents

@@ -701,9 +701,14 @@ type SpawnAgentRequest struct {
 	// Initial prompt to send to Claude
 	Prompt string `protobuf:"bytes,5,opt,name=prompt,proto3" json:"prompt,omitempty"`
 	// Agent type: "claude" (default) or "codex"
-	AgentType     string `protobuf:"bytes,6,opt,name=agent_type,json=agentType,proto3" json:"agent_type,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	AgentType string `protobuf:"bytes,6,opt,name=agent_type,json=agentType,proto3" json:"agent_type,omitempty"`
+	// Skip permission prompts so tasks execute immediately without user intervention
+	// For claude: uses --dangerously-skip-permissions
+	// For codex: uses --dangerously-bypass-approvals-and-sandbox
+	// Default: true (agents work autonomously)
+	SkipPermissions bool `protobuf:"varint,7,opt,name=skip_permissions,json=skipPermissions,proto3" json:"skip_permissions,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *SpawnAgentRequest) Reset() {
@@ -776,6 +781,13 @@ func (x *SpawnAgentRequest) GetAgentType() string {
 		return x.AgentType
 	}
 	return ""
+}
+
+func (x *SpawnAgentRequest) GetSkipPermissions() bool {
+	if x != nil {
+		return x.SkipPermissions
+	}
+	return false
 }
 
 // SpawnAgentResponse returns info about spawned agents
@@ -1506,7 +1518,7 @@ const file_map_v1_daemon_proto_rawDesc = "" +
 	"typeFilter\x12!\n" +
 	"\fagent_filter\x18\x02 \x01(\tR\vagentFilter\x12\x1f\n" +
 	"\vtask_filter\x18\x03 \x01(\tR\n" +
-	"taskFilter\"\xbc\x01\n" +
+	"taskFilter\"\xe7\x01\n" +
 	"\x11SpawnAgentRequest\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12\x16\n" +
 	"\x06branch\x18\x02 \x01(\tR\x06branch\x12!\n" +
@@ -1515,7 +1527,8 @@ const file_map_v1_daemon_proto_rawDesc = "" +
 	"namePrefix\x12\x16\n" +
 	"\x06prompt\x18\x05 \x01(\tR\x06prompt\x12\x1d\n" +
 	"\n" +
-	"agent_type\x18\x06 \x01(\tR\tagentType\"F\n" +
+	"agent_type\x18\x06 \x01(\tR\tagentType\x12)\n" +
+	"\x10skip_permissions\x18\a \x01(\bR\x0fskipPermissions\"F\n" +
 	"\x12SpawnAgentResponse\x120\n" +
 	"\x06agents\x18\x01 \x03(\v2\x18.map.v1.SpawnedAgentInfoR\x06agents\"\xf1\x01\n" +
 	"\x10SpawnedAgentInfo\x12\x19\n" +
