@@ -69,7 +69,7 @@ This creates two binaries in `bin/`:
 | Command | Description |
 |---------|-------------|
 | `map up [-f]` | Start the daemon (foreground with -f) |
-| `map down` | Stop the daemon |
+| `map down [-f]` | Stop the daemon (force immediate shutdown with -f) |
 | `map watch` | Stream real-time events from the daemon |
 
 ### Agent Management
@@ -78,7 +78,7 @@ This creates two binaries in `bin/`:
 |---------|-------------|
 | `map agents` | List spawned agents (alias: `map ag`) |
 | `map agent create [-a type]` | Spawn agents (claude or codex) |
-| `map agent list` | List spawned agents (same as `map agents`) |
+| `map agent list` | List spawned agents (alias: `ls`, same as `map agents`) |
 | `map agent kill <id>` | Terminate a spawned agent |
 | `map agent watch [id]` | Attach to agent's tmux session |
 | `map agent watch -a` | Watch all agents in tiled tmux view |
@@ -89,15 +89,17 @@ This creates two binaries in `bin/`:
 
 | Command | Description |
 |---------|-------------|
-| `map worktree ls` | List agent worktrees |
+| `map worktree ls` | List agent worktrees (alias: `list`) |
 | `map worktree cleanup` | Remove orphaned worktrees |
+| `map worktree cleanup --agent <id>` | Remove worktree for a specific agent |
+| `map worktree cleanup --all` | Remove all agent worktrees |
 
 ### Task Management
 
 | Command | Description |
 |---------|-------------|
-| `map task submit <description>` | Submit a new task for agent processing |
-| `map task ls` | List all tasks with status |
+| `map task submit <description>` | Submit a new task for agent processing (alias: `map tasks`, `map t`) |
+| `map task ls [-n limit]` | List all tasks with status (default limit: 20) |
 | `map task show <id>` | Show detailed task information |
 | `map task cancel <id>` | Cancel a pending or in-progress task |
 
@@ -163,11 +165,11 @@ Names are automatically generated and guaranteed unique within a session.
 
 When agents are spawned with worktree isolation (the default), each agent gets its own git worktree in `~/.mapd/worktrees/`. This allows multiple agents to work on the same repository concurrently without conflicts.
 
-**Permission Bypass:** When using worktrees, agents are automatically started with permission-bypassing flags to skip trust prompts:
+**Permission Bypass:** By default, agents are started with permission-bypassing flags to enable autonomous operation:
 - Claude: `--dangerously-skip-permissions`
 - Codex: `--dangerously-bypass-approvals-and-sandbox`
 
-This is safe because the worktree is an isolated copy created by MAP. When using `--no-worktree`, the standard prompts are shown since agents work directly in your repository.
+This is safe when using worktrees because each worktree is an isolated copy created by MAP. Use `--require-permissions` to restore standard permission prompts if needed.
 
 ```bash
 # List all worktrees
@@ -175,6 +177,9 @@ This is safe because the worktree is an isolated copy created by MAP. When using
 
 # Clean up orphaned worktrees (agents that have exited)
 ./bin/map worktree cleanup
+
+# Clean up a specific agent's worktree
+./bin/map worktree cleanup --agent <agent-id>
 
 # Clean up all worktrees
 ./bin/map worktree cleanup --all
@@ -251,6 +256,7 @@ Events include task lifecycle changes (created, offered, accepted, started, comp
 | `--no-worktree` | `false` | Skip worktree isolation |
 | `--name` | agent type | Agent name prefix |
 | `-p, --prompt` | none | Initial prompt to send to the agent |
+| `--require-permissions` | `false` | Require permission prompts (by default, permissions are skipped for autonomous operation) |
 
 ## Architecture
 
@@ -291,11 +297,17 @@ mapcli/
 
 ## Configuration
 
-### Daemon
+### Global CLI Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-s, --socket` | `/tmp/mapd.sock` | Unix socket path |
+| `-s, --socket` | `/tmp/mapd.sock` | Unix socket path for daemon communication |
+
+### Daemon (`map up`)
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-f, --foreground` | `false` | Run daemon in foreground |
 | `-d, --data-dir` | `~/.mapd` | Data directory for SQLite |
 
 ## System Requirements
