@@ -20,6 +20,7 @@ var agentMergeCmd = &cobra.Command{
 This command will:
 1. Commit any uncommitted changes in the agent's worktree
 2. Merge those changes into your current branch
+3. Optionally kill the agent after a successful merge (with -k flag)
 
 Run this from your main repository directory.`,
 	Args: cobra.ExactArgs(1),
@@ -30,12 +31,14 @@ var (
 	mergeMessage  string
 	mergeNoCommit bool
 	mergeSquash   bool
+	mergeKill     bool
 )
 
 func init() {
 	agentMergeCmd.Flags().StringVarP(&mergeMessage, "message", "m", "", "commit message for uncommitted changes (default: auto-generated)")
 	agentMergeCmd.Flags().BoolVar(&mergeNoCommit, "no-commit", false, "merge without committing (stage changes only)")
 	agentMergeCmd.Flags().BoolVar(&mergeSquash, "squash", false, "squash all agent commits into one")
+	agentMergeCmd.Flags().BoolVarP(&mergeKill, "kill", "k", false, "kill the agent after successful merge")
 	agentCmd.AddCommand(agentMergeCmd)
 }
 
@@ -137,6 +140,24 @@ func runAgentMerge(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("Merge successful!")
+
+	// Kill the agent if requested
+	if mergeKill {
+		fmt.Printf("Killing agent %s...\n", foundAgent)
+		killCtx, killCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer killCancel()
+
+		resp, err := c.KillAgent(killCtx, foundAgent, false)
+		if err != nil {
+			return fmt.Errorf("kill agent: %w", err)
+		}
+		if resp.Success {
+			fmt.Printf("Agent %s killed\n", foundAgent)
+		} else {
+			fmt.Printf("Failed to kill agent: %s\n", resp.Message)
+		}
+	}
+
 	return nil
 }
 
