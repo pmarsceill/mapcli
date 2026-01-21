@@ -14,6 +14,7 @@ import (
 
 // GitHub Project data structures for JSON parsing
 type ghProject struct {
+	ID     string `json:"id"`
 	Number int    `json:"number"`
 	Title  string `json:"title"`
 }
@@ -200,7 +201,7 @@ func runTaskSyncGHProject(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  Created task: %s\n", task.TaskId)
 
 		// Update item status on GitHub
-		if err := updateItemStatus(project.Number, item.ID, statusField.ID, targetOptionID); err != nil {
+		if err := updateItemStatus(project.ID, item.ID, statusField.ID, targetOptionID); err != nil {
 			fmt.Printf("  Warning: failed to update GitHub status: %v\n", err)
 		} else {
 			fmt.Printf("  Moved to %q on GitHub\n", syncTargetColumn)
@@ -307,10 +308,10 @@ func buildTaskDescription(item ghItem) string {
 	return sb.String()
 }
 
-func updateItemStatus(projectNumber int, itemID, fieldID, optionID string) error {
+func updateItemStatus(projectID, itemID, fieldID, optionID string) error {
 	args := []string{
 		"project", "item-edit",
-		"--project-id", fmt.Sprintf("%d", projectNumber),
+		"--project-id", projectID,
 		"--id", itemID,
 		"--field-id", fieldID,
 		"--single-select-option-id", optionID,
