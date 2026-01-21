@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -16,10 +17,11 @@ import (
 
 // ProcessManager manages spawned Claude Code agent slots using tmux sessions
 type ProcessManager struct {
-	mu      sync.RWMutex
-	agents  map[string]*AgentSlot
-	eventCh chan *mapv1.Event
-	logsDir string
+	mu            sync.RWMutex
+	agents        map[string]*AgentSlot
+	eventCh       chan *mapv1.Event
+	logsDir       string
+	lastAssigned  string // ID of last agent assigned a task (for round-robin)
 }
 
 // AgentSlot represents an agent running in a tmux session
@@ -243,14 +245,40 @@ func (m *ProcessManager) HasTmuxSession(agentID string) bool {
 	return cmd.Run() == nil
 }
 
-// FindAvailableAgent finds an idle agent slot
+// FindAvailableAgent finds an idle agent slot using round-robin selection
 func (m *ProcessManager) FindAvailableAgent() *AgentSlot {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	for _, slot := range m.agents {
+	if len(m.agents) == 0 {
+		return nil
+	}
+
+	// Get sorted list of agent IDs for consistent ordering
+	ids := make([]string, 0, len(m.agents))
+	for id := range m.agents {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	// Find starting index (after lastAssigned)
+	startIdx := 0
+	if m.lastAssigned != "" {
+		for i, id := range ids {
+			if id == m.lastAssigned {
+				startIdx = (i + 1) % len(ids)
+				break
+			}
+		}
+	}
+
+	// Round-robin: check agents starting from startIdx
+	for i := 0; i < len(ids); i++ {
+		idx := (startIdx + i) % len(ids)
+		slot := m.agents[ids[idx]]
 		slot.mu.Lock()
 		if slot.Status == AgentStatusIdle {
+			m.lastAssigned = slot.AgentID
 			slot.mu.Unlock()
 			return slot
 		}
