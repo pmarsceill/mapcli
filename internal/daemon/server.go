@@ -74,6 +74,9 @@ func NewServer(cfg *Config) (*Server, error) {
 	tasks := NewTaskRouter(store, processes, eventCh)
 	names := NewNameGenerator()
 
+	// Wire up callback to process pending tasks when agents become available
+	processes.SetOnAgentAvailable(tasks.ProcessPendingTasks)
+
 	s := &Server{
 		store:      store,
 		tasks:      tasks,

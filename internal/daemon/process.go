@@ -17,11 +17,12 @@ import (
 
 // ProcessManager manages spawned Claude Code agent slots using tmux sessions
 type ProcessManager struct {
-	mu            sync.RWMutex
-	agents        map[string]*AgentSlot
-	eventCh       chan *mapv1.Event
-	logsDir       string
-	lastAssigned  string // ID of last agent assigned a task (for round-robin)
+	mu               sync.RWMutex
+	agents           map[string]*AgentSlot
+	eventCh          chan *mapv1.Event
+	logsDir          string
+	lastAssigned     string // ID of last agent assigned a task (for round-robin)
+	onAgentAvailable func() // callback when an agent becomes available
 }
 
 // AgentSlot represents an agent running in a tmux session
@@ -59,6 +60,14 @@ func NewProcessManager(logsDir string, eventCh chan *mapv1.Event) *ProcessManage
 		eventCh: eventCh,
 		logsDir: logsDir,
 	}
+}
+
+// SetOnAgentAvailable sets a callback that is invoked when an agent becomes available.
+// This is used to trigger processing of pending tasks.
+func (m *ProcessManager) SetOnAgentAvailable(callback func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.onAgentAvailable = callback
 }
 
 // CreateSlot creates a new agent with a tmux session running claude or codex
@@ -148,10 +157,18 @@ func (m *ProcessManager) CreateSlot(agentID, workdir, agentType string, skipPerm
 
 	m.agents[agentID] = slot
 
+	// Capture callback before unlocking
+	callback := m.onAgentAvailable
+
 	// Emit connected event
 	m.emitAgentEvent(slot, true)
 
 	log.Printf("created %s agent %s with tmux session %s (workdir: %s)", cliBinary, agentID, tmuxSession, workdir)
+
+	// Notify that an agent is available (for pending task processing)
+	if callback != nil {
+		go callback()
+	}
 
 	return slot, nil
 }
@@ -177,12 +194,20 @@ func (m *ProcessManager) ExecuteTask(ctx context.Context, agentID string, taskID
 	tmuxSession := slot.TmuxSession
 	slot.mu.Unlock()
 
-	// Ensure we release the slot when done
+	// Ensure we release the slot when done and notify about availability
 	defer func() {
 		slot.mu.Lock()
 		slot.Status = AgentStatusIdle
 		slot.CurrentTask = ""
 		slot.mu.Unlock()
+
+		// Notify that an agent is available (for pending task processing)
+		m.mu.RLock()
+		callback := m.onAgentAvailable
+		m.mu.RUnlock()
+		if callback != nil {
+			go callback()
+		}
 	}()
 
 	log.Printf("agent %s executing task %s via tmux", agentID, taskID)
