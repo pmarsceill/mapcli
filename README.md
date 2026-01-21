@@ -106,6 +106,7 @@ This creates two binaries in `bin/`:
 | `map task ls [-n limit]` | List all tasks with status (default limit: 20) |
 | `map task show <id>` | Show detailed task information |
 | `map task cancel <id>` | Cancel a pending or in-progress task |
+| `map task sync gh-project <name>` | Sync tasks from a GitHub Project |
 
 ## Spawning Agents
 
@@ -237,6 +238,48 @@ map task show <task-id>
 # Cancel a task
 map task cancel <task-id>
 ```
+
+### Syncing from GitHub Projects
+
+MAP can import tasks directly from GitHub Projects using the `gh` CLI:
+
+```bash
+# Sync tasks from a GitHub Project (uses @me as default owner)
+map task sync gh-project "My Project"
+
+# Sync from an organization's project
+map task sync gh-project "Sprint Board" --owner myorg
+
+# Preview what would be synced without making changes
+map task sync gh-project "My Project" --dry-run
+
+# Sync from a different source column
+map task sync gh-project "My Project" --status-column "Ready"
+
+# Move items to a different target column after sync
+map task sync gh-project "My Project" --target-column "Assigned"
+
+# Limit the number of items to sync
+map task sync gh-project "My Project" --limit 5
+```
+
+**How it works:**
+1. Finds the GitHub Project by name
+2. Fetches issues from the source status column (default: "Todo")
+3. Creates a MAP task for each issue
+4. Moves the issue to the target status column (default: "In Progress")
+
+**Requirements:**
+- The `gh` CLI must be installed and authenticated (`gh auth login`)
+- The project must have a "Status" field with single-select options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--status-column` | `Todo` | Source status column to sync from |
+| `--target-column` | `In Progress` | Target status column after task creation |
+| `--owner` | `@me` | GitHub project owner (user, org, or @me) |
+| `--limit` | `10` | Maximum number of items to sync |
+| `--dry-run` | `false` | Preview without creating tasks or updating GitHub |
 
 ## Event Streaming
 
