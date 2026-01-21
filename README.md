@@ -6,6 +6,29 @@ A tool for spawning and managing multiple AI coding agents (Claude Code and Open
 
 https://github.com/user-attachments/assets/1e0f02fe-fdbb-4cf7-bff4-a2161662b7a2
 
+## Installation
+
+**Quick install (macOS and Linux):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pmarsceill/mapcli/main/install.sh | bash
+```
+
+This installs both `map` and `mapd` to `~/.local/bin`. Make sure this directory is in your PATH.
+
+**Manual installation:**
+
+Download the latest release from the [releases page](https://github.com/pmarsceill/mapcli/releases) and extract the binaries to a directory in your PATH.
+
+**Build from source:**
+
+```bash
+git clone https://github.com/pmarsceill/mapcli.git
+cd mapcli
+make build
+# Binaries are in bin/
+```
+
 ## Overview
 
 MAP (Multi-Agent Platform) provides infrastructure for spawning and coordinating multiple AI coding agents. It supports both **Claude Code** and **OpenAI Codex** agents. The architecture separates concerns:
