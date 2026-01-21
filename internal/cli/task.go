@@ -63,6 +63,7 @@ func init() {
 	taskCmd.AddCommand(taskListCmd)
 	taskCmd.AddCommand(taskShowCmd)
 	taskCmd.AddCommand(taskCancelCmd)
+	taskCmd.AddCommand(taskSyncCmd)
 	rootCmd.AddCommand(taskCmd)
 }
 
