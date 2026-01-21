@@ -314,8 +314,15 @@ func (s *Server) SpawnAgent(ctx context.Context, req *mapv1.SpawnAgentRequest) (
 		}
 
 		// Create the agent slot
-		// When using worktrees, skip the workspace trust prompt since it's an isolated copy
-		slot, err := s.processes.Spawn(agentID, workdir, req.GetPrompt(), agentType, req.GetUseWorktree())
+		// Skip permissions by default for autonomous agent operation
+		// Permissions are skipped when: explicitly requested via skip_permissions OR using worktrees
+		// Since proto3 bools default to false, we default to true for autonomous operation
+		skipPermissions := req.GetSkipPermissions() || req.GetUseWorktree()
+		if !req.GetSkipPermissions() && !req.GetUseWorktree() {
+			// Neither flag set - default to skipping permissions for autonomous operation
+			skipPermissions = true
+		}
+		slot, err := s.processes.Spawn(agentID, workdir, req.GetPrompt(), agentType, skipPermissions)
 		if err != nil {
 			// Cleanup worktree if we created one
 			if worktreePath != "" {
