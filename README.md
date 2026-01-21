@@ -84,10 +84,12 @@ This creates two binaries in `bin/`:
 | `map agent create [-a type]` | Spawn agents (claude or codex) |
 | `map agent list` | List spawned agents (alias: `ls`, same as `map agents`) |
 | `map agent kill <id>` | Terminate a spawned agent |
+| `map agent kill --all` | Terminate all spawned agents |
 | `map agent watch [id]` | Attach to agent's tmux session |
 | `map agent watch -a` | Watch all agents in tiled tmux view |
 | `map agent respawn <id>` | Restart agent in dead tmux pane |
 | `map agent merge <id>` | Merge agent's worktree changes into current branch |
+| `map agent merge <id> -k` | Merge agent's changes and kill the agent |
 
 ### Worktree Management
 
@@ -163,6 +165,12 @@ map agent kill claude-abc123
 
 # Force kill (SIGKILL instead of SIGTERM)
 map agent kill claude-abc123 --force
+
+# Kill all agents
+map agent kill --all
+
+# Force kill all agents
+map agent kill --all --force
 ```
 
 ### Worktree Management
@@ -205,11 +213,16 @@ map agent merge <agent-id> --squash
 
 # Stage changes without committing (for manual review)
 map agent merge <agent-id> --no-commit
+
+# Merge and kill the agent afterward
+map agent merge <agent-id> -k
+map agent merge <agent-id> --kill
 ```
 
 The merge command will:
 1. Commit any uncommitted changes in the agent's worktree (if any)
 2. Merge those changes into your current branch
+3. Optionally kill the agent after a successful merge (with `-k` flag)
 
 ## Task Management
 

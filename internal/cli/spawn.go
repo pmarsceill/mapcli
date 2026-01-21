@@ -37,11 +37,16 @@ var agentListCmd = &cobra.Command{
 }
 
 var agentKillCmd = &cobra.Command{
-	Use:   "kill <agent-id>",
+	Use:   "kill [agent-id]",
 	Short: "Terminate a spawned agent",
-	Long:  `Terminate a spawned Claude Code agent by its ID.`,
-	Args:  cobra.ExactArgs(1),
-	RunE:  runAgentKill,
+	Long: `Terminate a spawned agent by its ID, or kill all agents with --all.
+
+Examples:
+  map agent kill claude-abc123     # Kill a specific agent
+  map agent kill -a                # Kill all agents
+  map agent kill --all --force     # Force kill all agents`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runAgentKill,
 }
 
 var agentRespawnCmd = &cobra.Command{
@@ -75,6 +80,7 @@ func init() {
 
 	// agent kill flags
 	agentKillCmd.Flags().BoolP("force", "f", false, "Force kill (SIGKILL instead of SIGTERM)")
+	agentKillCmd.Flags().BoolP("all", "a", false, "Kill all running agents")
 }
 
 func runAgentCreate(cmd *cobra.Command, args []string) error {
@@ -185,8 +191,8 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 }
 
 func runAgentKill(cmd *cobra.Command, args []string) error {
-	agentID := args[0]
 	force, _ := cmd.Flags().GetBool("force")
+	killAll, _ := cmd.Flags().GetBool("all")
 
 	c, err := client.New(socketPath)
 	if err != nil {
@@ -196,6 +202,49 @@ func runAgentKill(cmd *cobra.Command, args []string) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	// Handle --all flag
+	if killAll {
+		agents, err := c.ListSpawnedAgents(ctx)
+		if err != nil {
+			return fmt.Errorf("list agents: %w", err)
+		}
+
+		if len(agents) == 0 {
+			fmt.Println("no agents to kill")
+			return nil
+		}
+
+		fmt.Printf("Killing %d agent(s)...\n", len(agents))
+		var failed int
+		for _, agent := range agents {
+			resp, err := c.KillAgent(ctx, agent.GetAgentId(), force)
+			if err != nil {
+				fmt.Printf("  failed to kill %s: %v\n", agent.GetAgentId(), err)
+				failed++
+				continue
+			}
+			if resp.Success {
+				fmt.Printf("  killed %s\n", agent.GetAgentId())
+			} else {
+				fmt.Printf("  failed to kill %s: %s\n", agent.GetAgentId(), resp.Message)
+				failed++
+			}
+		}
+
+		if failed > 0 {
+			return fmt.Errorf("failed to kill %d agent(s)", failed)
+		}
+		fmt.Println("All agents killed")
+		return nil
+	}
+
+	// Single agent kill requires an argument
+	if len(args) == 0 {
+		return fmt.Errorf("agent ID required (or use --all to kill all agents)")
+	}
+
+	agentID := args[0]
 
 	// Resolve partial agent ID
 	resolvedID, err := resolveAgentID(ctx, c, agentID)
