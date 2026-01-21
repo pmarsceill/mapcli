@@ -80,6 +80,38 @@ func (r *TaskRouter) routeTask(task *mapv1.Task) {
 	// No agents available, task remains pending
 }
 
+// ProcessPendingTasks assigns pending tasks to available agents.
+// Called when an agent becomes available (spawned or finished a task).
+func (r *TaskRouter) ProcessPendingTasks() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Get pending tasks ordered by creation time (oldest first)
+	pendingTasks, err := r.store.ListTasks("pending", "", 0)
+	if err != nil {
+		return
+	}
+
+	// Reverse to process oldest first (ListTasks returns DESC order)
+	for i := len(pendingTasks) - 1; i >= 0; i-- {
+		task := pendingTasks[i]
+
+		// Find an available agent
+		if r.spawned == nil {
+			return
+		}
+		slot := r.spawned.FindAvailableAgent()
+		if slot == nil {
+			// No more available agents
+			return
+		}
+
+		// Convert to proto and assign
+		protoTask := taskRecordToProto(task)
+		r.executeOnSpawnedAgent(protoTask, slot)
+	}
+}
+
 // executeOnSpawnedAgent runs a task on a spawned Claude agent slot
 func (r *TaskRouter) executeOnSpawnedAgent(task *mapv1.Task, slot *AgentSlot) {
 	// Update task status to in_progress
