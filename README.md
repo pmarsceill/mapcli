@@ -16,6 +16,61 @@ curl -fsSL https://raw.githubusercontent.com/pmarsceill/mapcli/main/install.sh |
 
 This installs both `map` and `mapd` to `~/.local/bin`. Make sure this directory is in your PATH.
 
+### System Requirements
+
+MAP requires the following tools to be installed and available in your PATH:
+
+| Dependency | Required For | Version |
+|------------|--------------|---------|
+| **git** | Worktree isolation | 2.15+ (worktree support) |
+| **tmux** | Agent session management | Any recent version |
+| **claude** | Claude Code agents | Latest (optional if only using Codex) |
+| **codex** | OpenAI Codex agents | Latest (optional if only using Claude) |
+
+At least one of `claude` or `codex` must be installed depending on which agent type you want to use.
+
+**Installing Dependencies:**
+
+<details>
+<summary>macOS (Homebrew)</summary>
+
+```bash
+brew install git tmux
+# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
+# Codex CLI: https://github.com/openai/codex
+```
+</details>
+
+<details>
+<summary>Ubuntu/Debian</summary>
+
+```bash
+sudo apt update && sudo apt install git tmux
+# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
+# Codex CLI: https://github.com/openai/codex
+```
+</details>
+
+<details>
+<summary>Fedora/RHEL</summary>
+
+```bash
+sudo dnf install git tmux
+# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
+# Codex CLI: https://github.com/openai/codex
+```
+</details>
+
+<details>
+<summary>Arch Linux</summary>
+
+```bash
+sudo pacman -S git tmux
+# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
+# Codex CLI: https://github.com/openai/codex
+```
+</details>
+
 **Manual installation:**
 
 Download the latest release from the [releases page](https://github.com/pmarsceill/mapcli/releases) and extract the binaries to a directory in your PATH.
@@ -393,49 +448,6 @@ mapcli/
 |------|---------|-------------|
 | `-f, --foreground` | `false` | Run daemon in foreground |
 | `-d, --data-dir` | `~/.mapd` | Data directory for SQLite |
-
-## System Requirements
-
-MAP requires the following tools to be installed and available in your PATH:
-
-| Dependency | Required For | Version |
-|------------|--------------|---------|
-| **git** | Worktree isolation | 2.15+ (worktree support) |
-| **tmux** | Agent session management | Any recent version |
-| **claude** | Claude Code agents | Latest (optional if only using Codex) |
-| **codex** | OpenAI Codex agents | Latest (optional if only using Claude) |
-
-At least one of `claude` or `codex` must be installed depending on which agent type you want to use.
-
-### Installing Dependencies
-
-**macOS (Homebrew):**
-```bash
-brew install git tmux
-# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
-# Codex CLI: https://github.com/openai/codex
-```
-
-**Ubuntu/Debian:**
-```bash
-sudo apt update && sudo apt install git tmux
-# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
-# Codex CLI: https://github.com/openai/codex
-```
-
-**Fedora/RHEL:**
-```bash
-sudo dnf install git tmux
-# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
-# Codex CLI: https://github.com/openai/codex
-```
-
-**Arch Linux:**
-```bash
-sudo pacman -S git tmux
-# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
-# Codex CLI: https://github.com/openai/codex
-```
 
 ## Development
 
