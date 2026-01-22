@@ -97,6 +97,7 @@ This creates two binaries in `bin/`:
 |---------|-------------|
 | `map up [-f]` | Start the daemon (foreground with -f) |
 | `map down [-f]` | Stop the daemon (force immediate shutdown with -f) |
+| `map clean` | Clean up orphaned processes, tmux sessions, and socket files |
 | `map watch` | Stream real-time events from the daemon |
 
 ### Agent Management
