@@ -4,7 +4,11 @@
 
 A tool for spawning and managing multiple AI coding agents (Claude Code and OpenAI Codex) with a Docker-like architecture: thin CLI (`map`) + local daemon (`mapd`).
 
+**Run Claude Code and Codex agents in parallel**
 https://github.com/user-attachments/assets/1e0f02fe-fdbb-4cf7-bff4-a2161662b7a2
+
+**Sync gh projects / issues**
+https://github.com/user-attachments/assets/f418e6c3-bfff-4859-b7d4-938eecfa4934
 
 ## Installation
 
