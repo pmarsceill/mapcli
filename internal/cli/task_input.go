@@ -44,7 +44,7 @@ func runTaskInputNeeded(cmd *cobra.Command, args []string) error {
 	taskID := args[0]
 	question := strings.Join(args[1:], " ")
 
-	c, err := client.New(socketPath)
+	c, err := client.New(getSocketPath())
 	if err != nil {
 		return fmt.Errorf("connect to daemon: %w", err)
 	}
@@ -72,7 +72,7 @@ func runTaskMyTask(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("get working directory: %w", err)
 	}
 
-	c, err := client.New(socketPath)
+	c, err := client.New(getSocketPath())
 	if err != nil {
 		return fmt.Errorf("connect to daemon: %w", err)
 	}
