@@ -25,13 +25,15 @@ const (
 type Server struct {
 	mapv1.UnimplementedDaemonServiceServer
 
-	store     *Store
-	tasks     *TaskRouter
-	worktrees *WorktreeManager
-	processes *ProcessManager
-	names     *NameGenerator
-	eventCh   chan *mapv1.Event
-	dataDir   string
+	store        *Store
+	tasks        *TaskRouter
+	worktrees    *WorktreeManager
+	processes    *ProcessManager
+	names        *NameGenerator
+	githubPoller *GitHubPoller
+	inputMonitor *InputMonitor
+	eventCh      chan *mapv1.Event
+	dataDir      string
 
 	grpcServer *grpc.Server
 	listener   net.Listener
@@ -73,21 +75,25 @@ func NewServer(cfg *Config) (*Server, error) {
 	processes := NewProcessManager(cfg.DataDir, eventCh)
 	tasks := NewTaskRouter(store, processes, eventCh)
 	names := NewNameGenerator()
+	githubPoller := NewGitHubPoller(store, processes, eventCh)
+	inputMonitor := NewInputMonitor(store, processes, eventCh)
 
 	// Wire up callback to process pending tasks when agents become available
 	processes.SetOnAgentAvailable(tasks.ProcessPendingTasks)
 
 	s := &Server{
-		store:      store,
-		tasks:      tasks,
-		worktrees:  worktrees,
-		processes:  processes,
-		names:      names,
-		eventCh:    eventCh,
-		dataDir:    cfg.DataDir,
-		watchers:   make(map[string]chan *mapv1.Event),
-		shutdown:   make(chan struct{}),
-		socketPath: cfg.SocketPath,
+		store:        store,
+		tasks:        tasks,
+		worktrees:    worktrees,
+		processes:    processes,
+		names:        names,
+		githubPoller: githubPoller,
+		inputMonitor: inputMonitor,
+		eventCh:      eventCh,
+		dataDir:      cfg.DataDir,
+		watchers:     make(map[string]chan *mapv1.Event),
+		shutdown:     make(chan struct{}),
+		socketPath:   cfg.SocketPath,
 	}
 
 	return s, nil
@@ -112,6 +118,12 @@ func (s *Server) Start() error {
 	// Start event broadcaster
 	go s.broadcastEvents()
 
+	// Start GitHub poller for bidirectional issue sync
+	s.githubPoller.Start()
+
+	// Start input monitor to detect when agents are waiting for user input
+	s.inputMonitor.Start()
+
 	log.Printf("mapd listening on %s", s.socketPath)
 	return s.grpcServer.Serve(listener)
 }
@@ -119,6 +131,16 @@ func (s *Server) Start() error {
 // Stop gracefully shuts down the server
 func (s *Server) Stop() {
 	close(s.shutdown)
+
+	// Stop GitHub poller
+	if s.githubPoller != nil {
+		s.githubPoller.Stop()
+	}
+
+	// Stop input monitor
+	if s.inputMonitor != nil {
+		s.inputMonitor.Stop()
+	}
 
 	// Kill all spawned processes
 	if s.processes != nil {
@@ -477,6 +499,113 @@ func (s *Server) CleanupWorktrees(ctx context.Context, req *mapv1.CleanupWorktre
 	}, nil
 }
 
+// --- Task Input Management ---
+
+func (s *Server) RequestInput(ctx context.Context, req *mapv1.RequestInputRequest) (*mapv1.RequestInputResponse, error) {
+	taskID := req.GetTaskId()
+	question := req.GetQuestion()
+
+	if taskID == "" {
+		return nil, fmt.Errorf("task_id is required")
+	}
+	if question == "" {
+		return nil, fmt.Errorf("question is required")
+	}
+
+	// Get the task
+	task, err := s.store.GetTask(taskID)
+	if err != nil {
+		return nil, fmt.Errorf("get task: %w", err)
+	}
+	if task == nil {
+		return &mapv1.RequestInputResponse{
+			Success: false,
+			Message: fmt.Sprintf("task %s not found", taskID),
+		}, nil
+	}
+
+	// Check if task has GitHub source
+	if task.GitHubOwner == "" || task.GitHubRepo == "" || task.GitHubIssueNumber == 0 {
+		return &mapv1.RequestInputResponse{
+			Success: false,
+			Message: "task has no GitHub issue source - cannot request input",
+		}, nil
+	}
+
+	// Post comment to GitHub
+	if err := PostQuestionToGitHub(task.GitHubOwner, task.GitHubRepo, task.GitHubIssueNumber, question); err != nil {
+		return &mapv1.RequestInputResponse{
+			Success: false,
+			Message: fmt.Sprintf("failed to post to GitHub: %v", err),
+		}, nil
+	}
+
+	// Update task status to waiting_input
+	if err := s.store.SetTaskWaitingInput(taskID, question); err != nil {
+		return &mapv1.RequestInputResponse{
+			Success: false,
+			Message: fmt.Sprintf("failed to update task: %v", err),
+		}, nil
+	}
+
+	// Emit event
+	s.emitTaskWaitingInputEvent(task, question)
+
+	return &mapv1.RequestInputResponse{
+		Success: true,
+		Message: fmt.Sprintf("Posted question to %s/%s#%d", task.GitHubOwner, task.GitHubRepo, task.GitHubIssueNumber),
+	}, nil
+}
+
+func (s *Server) GetCurrentTask(ctx context.Context, req *mapv1.GetCurrentTaskRequest) (*mapv1.GetCurrentTaskResponse, error) {
+	workingDir := req.GetWorkingDirectory()
+	if workingDir == "" {
+		return nil, fmt.Errorf("working_directory is required")
+	}
+
+	// Find the agent by worktree path
+	agent, err := s.store.GetAgentByWorktreePath(workingDir)
+	if err != nil {
+		return nil, fmt.Errorf("get agent: %w", err)
+	}
+	if agent == nil {
+		return &mapv1.GetCurrentTaskResponse{Task: nil}, nil
+	}
+
+	// Find the task assigned to this agent
+	task, err := s.store.GetTaskByAgentID(agent.AgentID)
+	if err != nil {
+		return nil, fmt.Errorf("get task: %w", err)
+	}
+	if task == nil {
+		return &mapv1.GetCurrentTaskResponse{Task: nil}, nil
+	}
+
+	return &mapv1.GetCurrentTaskResponse{
+		Task: s.tasks.taskRecordToProtoWithGitHub(task),
+	}, nil
+}
+
+func (s *Server) emitTaskWaitingInputEvent(task *TaskRecord, question string) {
+	event := &mapv1.Event{
+		EventId:   uuid.New().String(),
+		Type:      mapv1.EventType_EVENT_TYPE_TASK_WAITING_INPUT,
+		Timestamp: timestamppb.Now(),
+		Payload: &mapv1.Event_Task{
+			Task: &mapv1.TaskEvent{
+				TaskId:    task.TaskID,
+				NewStatus: mapv1.TaskStatus_TASK_STATUS_WAITING_INPUT,
+				AgentId:   task.AssignedTo,
+			},
+		},
+	}
+
+	select {
+	case s.eventCh <- event:
+	default:
+	}
+}
+
 // Helper functions
 
 func expandPath(path string) string {
@@ -503,6 +632,8 @@ func taskStatusToString(s mapv1.TaskStatus) string {
 		return "failed"
 	case mapv1.TaskStatus_TASK_STATUS_CANCELLED:
 		return "cancelled"
+	case mapv1.TaskStatus_TASK_STATUS_WAITING_INPUT:
+		return "waiting_input"
 	default:
 		return ""
 	}

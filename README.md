@@ -133,6 +133,8 @@ This creates two binaries in `bin/`:
 | `map task show <id>` | Show detailed task information |
 | `map task cancel <id>` | Cancel a pending or in-progress task |
 | `map task sync gh-project <name>` | Sync tasks from a GitHub Project |
+| `map task my-task` | Show the current task for this agent (by working directory) |
+| `map task input-needed <id> <question>` | Request user input via GitHub issue |
 
 ## Spawning Agents
 
@@ -257,6 +259,8 @@ MAP includes a task routing system for distributing work to agents.
 
 Tasks follow this lifecycle: `PENDING → OFFERED → ACCEPTED → IN_PROGRESS → COMPLETED/FAILED/CANCELLED`
 
+Tasks can also enter `WAITING_INPUT` status when an agent needs user input. Once the user responds, the task returns to `IN_PROGRESS`.
+
 ### Task Commands
 
 ```bash
@@ -318,6 +322,38 @@ map task sync gh-project "My Project" --limit 5
 | `--limit` | `10` | Maximum number of items to sync |
 | `--dry-run` | `false` | Preview without creating tasks or updating GitHub |
 
+### Bidirectional GitHub Issue Sync
+
+When tasks are synced from GitHub Projects, MAP tracks the originating issue and enables bidirectional communication:
+
+**Automatic Input Detection:**
+- The daemon monitors agent tmux sessions for signs that the agent is waiting for user input
+- When detected (agent idle + question pattern in output), the question is automatically posted to the GitHub issue
+- Users can respond directly on the GitHub issue
+- Responses are automatically delivered back to the agent's session
+
+**How it works:**
+1. Sync issues with `map task sync gh-project "Project"` - GitHub metadata is stored with each task
+2. Agent works on the task and asks a question (detected automatically)
+3. Question is posted to the GitHub issue with prefix `**My agent needs more input:**`
+4. User responds on GitHub
+5. Response is delivered to the agent's tmux session
+6. Agent continues working
+
+**Manual input requests:**
+
+Agents can also explicitly request input:
+```bash
+# From within an agent session, request user input
+map task input-needed <task-id> "What error format should I use?"
+```
+
+**Agent introspection:**
+```bash
+# Find the current task for this working directory
+map task my-task
+```
+
 ## Event Streaming
 
 Watch real-time events from the daemon:
@@ -327,7 +363,7 @@ Watch real-time events from the daemon:
 map watch
 ```
 
-Events include task lifecycle changes (created, offered, accepted, started, completed, failed, cancelled) and agent status updates.
+Events include task lifecycle changes (created, offered, accepted, started, completed, failed, cancelled, waiting_input, input_received) and agent status updates.
 
 ### Agent Create Options
 

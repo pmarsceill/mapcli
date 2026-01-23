@@ -212,8 +212,8 @@ func (m *ProcessManager) ExecuteTask(ctx context.Context, agentID string, taskID
 
 	log.Printf("agent %s executing task %s via tmux", agentID, taskID)
 
-	// Build the prompt
-	prompt := description
+	// Build the prompt with task ID prefix for agent introspection
+	prompt := fmt.Sprintf("[Task ID: %s]\n\n%s", taskID, description)
 	if len(scopePaths) > 0 {
 		prompt = fmt.Sprintf("%s\n\nScope/files: %s", prompt, strings.Join(scopePaths, ", "))
 	}
@@ -231,7 +231,12 @@ func (m *ProcessManager) ExecuteTask(ctx context.Context, agentID string, taskID
 		return "", fmt.Errorf("failed to send task to tmux: %w", err)
 	}
 
-	// Send Enter key to submit the prompt
+	// Wait for the pasted text to be processed by the terminal
+	// Long text may show as "[Pasted text #1 +N lines]" and need confirmation
+	time.Sleep(300 * time.Millisecond)
+
+	// Send Enter key to confirm/submit the prompt
+	// For long pastes, this confirms the paste; for short text, this submits
 	cmd = exec.CommandContext(ctx, "tmux", "send-keys", "-t", tmuxSession, "Enter")
 	if err := cmd.Run(); err != nil {
 		log.Printf("agent %s task %s failed to send Enter: %v", agentID, taskID, err)
@@ -471,7 +476,10 @@ func (m *ProcessManager) Spawn(agentID, workdir, prompt, agentType string, skipP
 		if err := cmd.Run(); err != nil {
 			log.Printf("warning: failed to send initial prompt text to %s: %v", agentID, err)
 		} else {
-			// Send Enter to submit
+			// Wait for pasted text to be processed (long text shows as collapsed paste)
+			time.Sleep(300 * time.Millisecond)
+
+			// Send Enter to confirm/submit
 			cmd = exec.Command("tmux", "send-keys", "-t", slot.TmuxSession, "Enter")
 			if err := cmd.Run(); err != nil {
 				log.Printf("warning: failed to send Enter to %s: %v", agentID, err)

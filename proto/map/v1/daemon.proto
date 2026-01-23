@@ -14,6 +14,8 @@ service DaemonService {
   rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
   rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
   rpc CancelTask(CancelTaskRequest) returns (CancelTaskResponse);
+  rpc RequestInput(RequestInputRequest) returns (RequestInputResponse);
+  rpc GetCurrentTask(GetCurrentTaskRequest) returns (GetCurrentTaskResponse);
 
   // Daemon control
   rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
@@ -39,6 +41,10 @@ message SubmitTaskRequest {
   repeated string scope_paths = 2;
   // Optional: target specific agent
   string target_agent_id = 3;
+  // Optional: GitHub issue source tracking
+  string github_owner = 4;
+  string github_repo = 5;
+  int32 github_issue_number = 6;
 }
 
 // SubmitTaskResponse returns the created task
@@ -216,4 +222,28 @@ message CleanupWorktreesRequest {
 message CleanupWorktreesResponse {
   int32 removed_count = 1;
   repeated string removed_paths = 2;
+}
+
+// --- Task Input Messages ---
+
+// RequestInputRequest signals that an agent needs user input
+message RequestInputRequest {
+  string task_id = 1;
+  string question = 2;
+}
+
+// RequestInputResponse confirms the input request was processed
+message RequestInputResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// GetCurrentTaskRequest looks up the task for a working directory
+message GetCurrentTaskRequest {
+  string working_directory = 1;
+}
+
+// GetCurrentTaskResponse returns the task for the working directory
+message GetCurrentTaskResponse {
+  Task task = 1;
 }

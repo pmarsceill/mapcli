@@ -26,14 +26,15 @@ const (
 type TaskStatus int32
 
 const (
-	TaskStatus_TASK_STATUS_UNSPECIFIED TaskStatus = 0
-	TaskStatus_TASK_STATUS_PENDING     TaskStatus = 1
-	TaskStatus_TASK_STATUS_OFFERED     TaskStatus = 2
-	TaskStatus_TASK_STATUS_ACCEPTED    TaskStatus = 3
-	TaskStatus_TASK_STATUS_IN_PROGRESS TaskStatus = 4
-	TaskStatus_TASK_STATUS_COMPLETED   TaskStatus = 5
-	TaskStatus_TASK_STATUS_FAILED      TaskStatus = 6
-	TaskStatus_TASK_STATUS_CANCELLED   TaskStatus = 7
+	TaskStatus_TASK_STATUS_UNSPECIFIED   TaskStatus = 0
+	TaskStatus_TASK_STATUS_PENDING       TaskStatus = 1
+	TaskStatus_TASK_STATUS_OFFERED       TaskStatus = 2
+	TaskStatus_TASK_STATUS_ACCEPTED      TaskStatus = 3
+	TaskStatus_TASK_STATUS_IN_PROGRESS   TaskStatus = 4
+	TaskStatus_TASK_STATUS_COMPLETED     TaskStatus = 5
+	TaskStatus_TASK_STATUS_FAILED        TaskStatus = 6
+	TaskStatus_TASK_STATUS_CANCELLED     TaskStatus = 7
+	TaskStatus_TASK_STATUS_WAITING_INPUT TaskStatus = 8
 )
 
 // Enum value maps for TaskStatus.
@@ -47,16 +48,18 @@ var (
 		5: "TASK_STATUS_COMPLETED",
 		6: "TASK_STATUS_FAILED",
 		7: "TASK_STATUS_CANCELLED",
+		8: "TASK_STATUS_WAITING_INPUT",
 	}
 	TaskStatus_value = map[string]int32{
-		"TASK_STATUS_UNSPECIFIED": 0,
-		"TASK_STATUS_PENDING":     1,
-		"TASK_STATUS_OFFERED":     2,
-		"TASK_STATUS_ACCEPTED":    3,
-		"TASK_STATUS_IN_PROGRESS": 4,
-		"TASK_STATUS_COMPLETED":   5,
-		"TASK_STATUS_FAILED":      6,
-		"TASK_STATUS_CANCELLED":   7,
+		"TASK_STATUS_UNSPECIFIED":   0,
+		"TASK_STATUS_PENDING":       1,
+		"TASK_STATUS_OFFERED":       2,
+		"TASK_STATUS_ACCEPTED":      3,
+		"TASK_STATUS_IN_PROGRESS":   4,
+		"TASK_STATUS_COMPLETED":     5,
+		"TASK_STATUS_FAILED":        6,
+		"TASK_STATUS_CANCELLED":     7,
+		"TASK_STATUS_WAITING_INPUT": 8,
 	}
 )
 
@@ -91,14 +94,16 @@ func (TaskStatus) EnumDescriptor() ([]byte, []int) {
 type EventType int32
 
 const (
-	EventType_EVENT_TYPE_UNSPECIFIED    EventType = 0
-	EventType_EVENT_TYPE_TASK_CREATED   EventType = 1
-	EventType_EVENT_TYPE_TASK_OFFERED   EventType = 2
-	EventType_EVENT_TYPE_TASK_ACCEPTED  EventType = 3
-	EventType_EVENT_TYPE_TASK_STARTED   EventType = 4
-	EventType_EVENT_TYPE_TASK_COMPLETED EventType = 5
-	EventType_EVENT_TYPE_TASK_FAILED    EventType = 6
-	EventType_EVENT_TYPE_TASK_CANCELLED EventType = 7
+	EventType_EVENT_TYPE_UNSPECIFIED         EventType = 0
+	EventType_EVENT_TYPE_TASK_CREATED        EventType = 1
+	EventType_EVENT_TYPE_TASK_OFFERED        EventType = 2
+	EventType_EVENT_TYPE_TASK_ACCEPTED       EventType = 3
+	EventType_EVENT_TYPE_TASK_STARTED        EventType = 4
+	EventType_EVENT_TYPE_TASK_COMPLETED      EventType = 5
+	EventType_EVENT_TYPE_TASK_FAILED         EventType = 6
+	EventType_EVENT_TYPE_TASK_CANCELLED      EventType = 7
+	EventType_EVENT_TYPE_TASK_WAITING_INPUT  EventType = 8
+	EventType_EVENT_TYPE_TASK_INPUT_RECEIVED EventType = 9
 )
 
 // Enum value maps for EventType.
@@ -112,16 +117,20 @@ var (
 		5: "EVENT_TYPE_TASK_COMPLETED",
 		6: "EVENT_TYPE_TASK_FAILED",
 		7: "EVENT_TYPE_TASK_CANCELLED",
+		8: "EVENT_TYPE_TASK_WAITING_INPUT",
+		9: "EVENT_TYPE_TASK_INPUT_RECEIVED",
 	}
 	EventType_value = map[string]int32{
-		"EVENT_TYPE_UNSPECIFIED":    0,
-		"EVENT_TYPE_TASK_CREATED":   1,
-		"EVENT_TYPE_TASK_OFFERED":   2,
-		"EVENT_TYPE_TASK_ACCEPTED":  3,
-		"EVENT_TYPE_TASK_STARTED":   4,
-		"EVENT_TYPE_TASK_COMPLETED": 5,
-		"EVENT_TYPE_TASK_FAILED":    6,
-		"EVENT_TYPE_TASK_CANCELLED": 7,
+		"EVENT_TYPE_UNSPECIFIED":         0,
+		"EVENT_TYPE_TASK_CREATED":        1,
+		"EVENT_TYPE_TASK_OFFERED":        2,
+		"EVENT_TYPE_TASK_ACCEPTED":       3,
+		"EVENT_TYPE_TASK_STARTED":        4,
+		"EVENT_TYPE_TASK_COMPLETED":      5,
+		"EVENT_TYPE_TASK_FAILED":         6,
+		"EVENT_TYPE_TASK_CANCELLED":      7,
+		"EVENT_TYPE_TASK_WAITING_INPUT":  8,
+		"EVENT_TYPE_TASK_INPUT_RECEIVED": 9,
 	}
 )
 
@@ -152,25 +161,88 @@ func (EventType) EnumDescriptor() ([]byte, []int) {
 	return file_map_v1_types_proto_rawDescGZIP(), []int{1}
 }
 
-// Task represents a unit of work to be assigned to an agent
-type Task struct {
+// GitHubSource tracks the originating GitHub issue for a task
+type GitHubSource struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	ScopePaths    []string               `protobuf:"bytes,3,rep,name=scope_paths,json=scopePaths,proto3" json:"scope_paths,omitempty"`
-	Status        TaskStatus             `protobuf:"varint,4,opt,name=status,proto3,enum=map.v1.TaskStatus" json:"status,omitempty"`
-	AssignedTo    string                 `protobuf:"bytes,5,opt,name=assigned_to,json=assignedTo,proto3" json:"assigned_to,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	Result        string                 `protobuf:"bytes,8,opt,name=result,proto3" json:"result,omitempty"`
-	Error         string                 `protobuf:"bytes,9,opt,name=error,proto3" json:"error,omitempty"`
+	Owner         string                 `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
+	Repo          string                 `protobuf:"bytes,2,opt,name=repo,proto3" json:"repo,omitempty"`
+	IssueNumber   int32                  `protobuf:"varint,3,opt,name=issue_number,json=issueNumber,proto3" json:"issue_number,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *GitHubSource) Reset() {
+	*x = GitHubSource{}
+	mi := &file_map_v1_types_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitHubSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitHubSource) ProtoMessage() {}
+
+func (x *GitHubSource) ProtoReflect() protoreflect.Message {
+	mi := &file_map_v1_types_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitHubSource.ProtoReflect.Descriptor instead.
+func (*GitHubSource) Descriptor() ([]byte, []int) {
+	return file_map_v1_types_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *GitHubSource) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *GitHubSource) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *GitHubSource) GetIssueNumber() int32 {
+	if x != nil {
+		return x.IssueNumber
+	}
+	return 0
+}
+
+// Task represents a unit of work to be assigned to an agent
+type Task struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	TaskId               string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	Description          string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	ScopePaths           []string               `protobuf:"bytes,3,rep,name=scope_paths,json=scopePaths,proto3" json:"scope_paths,omitempty"`
+	Status               TaskStatus             `protobuf:"varint,4,opt,name=status,proto3,enum=map.v1.TaskStatus" json:"status,omitempty"`
+	AssignedTo           string                 `protobuf:"bytes,5,opt,name=assigned_to,json=assignedTo,proto3" json:"assigned_to,omitempty"`
+	CreatedAt            *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt            *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Result               string                 `protobuf:"bytes,8,opt,name=result,proto3" json:"result,omitempty"`
+	Error                string                 `protobuf:"bytes,9,opt,name=error,proto3" json:"error,omitempty"`
+	GithubSource         *GitHubSource          `protobuf:"bytes,10,opt,name=github_source,json=githubSource,proto3" json:"github_source,omitempty"`
+	WaitingInputQuestion string                 `protobuf:"bytes,11,opt,name=waiting_input_question,json=waitingInputQuestion,proto3" json:"waiting_input_question,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
 func (x *Task) Reset() {
 	*x = Task{}
-	mi := &file_map_v1_types_proto_msgTypes[0]
+	mi := &file_map_v1_types_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -182,7 +254,7 @@ func (x *Task) String() string {
 func (*Task) ProtoMessage() {}
 
 func (x *Task) ProtoReflect() protoreflect.Message {
-	mi := &file_map_v1_types_proto_msgTypes[0]
+	mi := &file_map_v1_types_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -195,7 +267,7 @@ func (x *Task) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Task.ProtoReflect.Descriptor instead.
 func (*Task) Descriptor() ([]byte, []int) {
-	return file_map_v1_types_proto_rawDescGZIP(), []int{0}
+	return file_map_v1_types_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Task) GetTaskId() string {
@@ -261,6 +333,20 @@ func (x *Task) GetError() string {
 	return ""
 }
 
+func (x *Task) GetGithubSource() *GitHubSource {
+	if x != nil {
+		return x.GithubSource
+	}
+	return nil
+}
+
+func (x *Task) GetWaitingInputQuestion() string {
+	if x != nil {
+		return x.WaitingInputQuestion
+	}
+	return ""
+}
+
 // TaskEvent contains task-related event data
 type TaskEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -274,7 +360,7 @@ type TaskEvent struct {
 
 func (x *TaskEvent) Reset() {
 	*x = TaskEvent{}
-	mi := &file_map_v1_types_proto_msgTypes[1]
+	mi := &file_map_v1_types_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -286,7 +372,7 @@ func (x *TaskEvent) String() string {
 func (*TaskEvent) ProtoMessage() {}
 
 func (x *TaskEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_map_v1_types_proto_msgTypes[1]
+	mi := &file_map_v1_types_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -299,7 +385,7 @@ func (x *TaskEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskEvent.ProtoReflect.Descriptor instead.
 func (*TaskEvent) Descriptor() ([]byte, []int) {
-	return file_map_v1_types_proto_rawDescGZIP(), []int{1}
+	return file_map_v1_types_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *TaskEvent) GetTaskId() string {
@@ -340,7 +426,7 @@ type StatusEvent struct {
 
 func (x *StatusEvent) Reset() {
 	*x = StatusEvent{}
-	mi := &file_map_v1_types_proto_msgTypes[2]
+	mi := &file_map_v1_types_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -352,7 +438,7 @@ func (x *StatusEvent) String() string {
 func (*StatusEvent) ProtoMessage() {}
 
 func (x *StatusEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_map_v1_types_proto_msgTypes[2]
+	mi := &file_map_v1_types_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -365,7 +451,7 @@ func (x *StatusEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatusEvent.ProtoReflect.Descriptor instead.
 func (*StatusEvent) Descriptor() ([]byte, []int) {
-	return file_map_v1_types_proto_rawDescGZIP(), []int{2}
+	return file_map_v1_types_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *StatusEvent) GetMessage() string {
@@ -392,7 +478,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_map_v1_types_proto_msgTypes[3]
+	mi := &file_map_v1_types_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -404,7 +490,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_map_v1_types_proto_msgTypes[3]
+	mi := &file_map_v1_types_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -417,7 +503,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_map_v1_types_proto_rawDescGZIP(), []int{3}
+	return file_map_v1_types_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Event) GetEventId() string {
@@ -486,7 +572,11 @@ var File_map_v1_types_proto protoreflect.FileDescriptor
 
 const file_map_v1_types_proto_rawDesc = "" +
 	"\n" +
-	"\x12map/v1/types.proto\x12\x06map.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd3\x02\n" +
+	"\x12map/v1/types.proto\x12\x06map.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"[\n" +
+	"\fGitHubSource\x12\x14\n" +
+	"\x05owner\x18\x01 \x01(\tR\x05owner\x12\x12\n" +
+	"\x04repo\x18\x02 \x01(\tR\x04repo\x12!\n" +
+	"\fissue_number\x18\x03 \x01(\x05R\vissueNumber\"\xc4\x03\n" +
 	"\x04Task\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1f\n" +
@@ -500,7 +590,10 @@ const file_map_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x16\n" +
 	"\x06result\x18\b \x01(\tR\x06result\x12\x14\n" +
-	"\x05error\x18\t \x01(\tR\x05error\"\xa5\x01\n" +
+	"\x05error\x18\t \x01(\tR\x05error\x129\n" +
+	"\rgithub_source\x18\n" +
+	" \x01(\v2\x14.map.v1.GitHubSourceR\fgithubSource\x124\n" +
+	"\x16waiting_input_question\x18\v \x01(\tR\x14waitingInputQuestion\"\xa5\x01\n" +
 	"\tTaskEvent\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x121\n" +
 	"\n" +
@@ -516,7 +609,7 @@ const file_map_v1_types_proto_rawDesc = "" +
 	"\ttimestamp\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12'\n" +
 	"\x04task\x18\x04 \x01(\v2\x11.map.v1.TaskEventH\x00R\x04task\x12-\n" +
 	"\x06status\x18\x05 \x01(\v2\x13.map.v1.StatusEventH\x00R\x06statusB\t\n" +
-	"\apayload*\xe0\x01\n" +
+	"\apayload*\xff\x01\n" +
 	"\n" +
 	"TaskStatus\x12\x1b\n" +
 	"\x17TASK_STATUS_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -526,7 +619,8 @@ const file_map_v1_types_proto_rawDesc = "" +
 	"\x17TASK_STATUS_IN_PROGRESS\x10\x04\x12\x19\n" +
 	"\x15TASK_STATUS_COMPLETED\x10\x05\x12\x16\n" +
 	"\x12TASK_STATUS_FAILED\x10\x06\x12\x19\n" +
-	"\x15TASK_STATUS_CANCELLED\x10\a*\xf6\x01\n" +
+	"\x15TASK_STATUS_CANCELLED\x10\a\x12\x1d\n" +
+	"\x19TASK_STATUS_WAITING_INPUT\x10\b*\xbd\x02\n" +
 	"\tEventType\x12\x1a\n" +
 	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17EVENT_TYPE_TASK_CREATED\x10\x01\x12\x1b\n" +
@@ -535,7 +629,9 @@ const file_map_v1_types_proto_rawDesc = "" +
 	"\x17EVENT_TYPE_TASK_STARTED\x10\x04\x12\x1d\n" +
 	"\x19EVENT_TYPE_TASK_COMPLETED\x10\x05\x12\x1a\n" +
 	"\x16EVENT_TYPE_TASK_FAILED\x10\x06\x12\x1d\n" +
-	"\x19EVENT_TYPE_TASK_CANCELLED\x10\aB1Z/github.com/pmarsceill/mapcli/proto/map/v1;mapv1b\x06proto3"
+	"\x19EVENT_TYPE_TASK_CANCELLED\x10\a\x12!\n" +
+	"\x1dEVENT_TYPE_TASK_WAITING_INPUT\x10\b\x12\"\n" +
+	"\x1eEVENT_TYPE_TASK_INPUT_RECEIVED\x10\tB1Z/github.com/pmarsceill/mapcli/proto/map/v1;mapv1b\x06proto3"
 
 var (
 	file_map_v1_types_proto_rawDescOnce sync.Once
@@ -550,31 +646,33 @@ func file_map_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_map_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_map_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_map_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_map_v1_types_proto_goTypes = []any{
 	(TaskStatus)(0),               // 0: map.v1.TaskStatus
 	(EventType)(0),                // 1: map.v1.EventType
-	(*Task)(nil),                  // 2: map.v1.Task
-	(*TaskEvent)(nil),             // 3: map.v1.TaskEvent
-	(*StatusEvent)(nil),           // 4: map.v1.StatusEvent
-	(*Event)(nil),                 // 5: map.v1.Event
-	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
+	(*GitHubSource)(nil),          // 2: map.v1.GitHubSource
+	(*Task)(nil),                  // 3: map.v1.Task
+	(*TaskEvent)(nil),             // 4: map.v1.TaskEvent
+	(*StatusEvent)(nil),           // 5: map.v1.StatusEvent
+	(*Event)(nil),                 // 6: map.v1.Event
+	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
 }
 var file_map_v1_types_proto_depIdxs = []int32{
-	0, // 0: map.v1.Task.status:type_name -> map.v1.TaskStatus
-	6, // 1: map.v1.Task.created_at:type_name -> google.protobuf.Timestamp
-	6, // 2: map.v1.Task.updated_at:type_name -> google.protobuf.Timestamp
-	0, // 3: map.v1.TaskEvent.old_status:type_name -> map.v1.TaskStatus
-	0, // 4: map.v1.TaskEvent.new_status:type_name -> map.v1.TaskStatus
-	1, // 5: map.v1.Event.type:type_name -> map.v1.EventType
-	6, // 6: map.v1.Event.timestamp:type_name -> google.protobuf.Timestamp
-	3, // 7: map.v1.Event.task:type_name -> map.v1.TaskEvent
-	4, // 8: map.v1.Event.status:type_name -> map.v1.StatusEvent
-	9, // [9:9] is the sub-list for method output_type
-	9, // [9:9] is the sub-list for method input_type
-	9, // [9:9] is the sub-list for extension type_name
-	9, // [9:9] is the sub-list for extension extendee
-	0, // [0:9] is the sub-list for field type_name
+	0,  // 0: map.v1.Task.status:type_name -> map.v1.TaskStatus
+	7,  // 1: map.v1.Task.created_at:type_name -> google.protobuf.Timestamp
+	7,  // 2: map.v1.Task.updated_at:type_name -> google.protobuf.Timestamp
+	2,  // 3: map.v1.Task.github_source:type_name -> map.v1.GitHubSource
+	0,  // 4: map.v1.TaskEvent.old_status:type_name -> map.v1.TaskStatus
+	0,  // 5: map.v1.TaskEvent.new_status:type_name -> map.v1.TaskStatus
+	1,  // 6: map.v1.Event.type:type_name -> map.v1.EventType
+	7,  // 7: map.v1.Event.timestamp:type_name -> google.protobuf.Timestamp
+	4,  // 8: map.v1.Event.task:type_name -> map.v1.TaskEvent
+	5,  // 9: map.v1.Event.status:type_name -> map.v1.StatusEvent
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_map_v1_types_proto_init() }
@@ -582,7 +680,7 @@ func file_map_v1_types_proto_init() {
 	if File_map_v1_types_proto != nil {
 		return
 	}
-	file_map_v1_types_proto_msgTypes[3].OneofWrappers = []any{
+	file_map_v1_types_proto_msgTypes[4].OneofWrappers = []any{
 		(*Event_Task)(nil),
 		(*Event_Status)(nil),
 	}
@@ -592,7 +690,7 @@ func file_map_v1_types_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_map_v1_types_proto_rawDesc), len(file_map_v1_types_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

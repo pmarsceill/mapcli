@@ -16,6 +16,7 @@ enum TaskStatus {
   TASK_STATUS_COMPLETED = 5;
   TASK_STATUS_FAILED = 6;
   TASK_STATUS_CANCELLED = 7;
+  TASK_STATUS_WAITING_INPUT = 8;
 }
 
 // EventType categorizes system events
@@ -28,6 +29,15 @@ enum EventType {
   EVENT_TYPE_TASK_COMPLETED = 5;
   EVENT_TYPE_TASK_FAILED = 6;
   EVENT_TYPE_TASK_CANCELLED = 7;
+  EVENT_TYPE_TASK_WAITING_INPUT = 8;
+  EVENT_TYPE_TASK_INPUT_RECEIVED = 9;
+}
+
+// GitHubSource tracks the originating GitHub issue for a task
+message GitHubSource {
+  string owner = 1;
+  string repo = 2;
+  int32 issue_number = 3;
 }
 
 // Task represents a unit of work to be assigned to an agent
@@ -41,6 +51,8 @@ message Task {
   google.protobuf.Timestamp updated_at = 7;
   string result = 8;
   string error = 9;
+  GitHubSource github_source = 10;
+  string waiting_input_question = 11;
 }
 
 // TaskEvent contains task-related event data

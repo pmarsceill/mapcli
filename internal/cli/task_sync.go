@@ -187,9 +187,12 @@ func runTaskSyncGHProject(cmd *cobra.Command, args []string) error {
 		// Build task description
 		description := buildTaskDescription(item)
 
-		// Submit task
+		// Extract GitHub metadata from issue URL
+		owner, repo := parseGitHubURL(item.Content.URL)
+
+		// Submit task with GitHub source tracking
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		task, err := c.SubmitTask(ctx, description, nil)
+		task, err := c.SubmitTaskWithGitHub(ctx, description, nil, owner, repo, int32(item.Content.Number))
 		cancel()
 
 		if err != nil {
@@ -199,6 +202,9 @@ func runTaskSyncGHProject(cmd *cobra.Command, args []string) error {
 		}
 
 		fmt.Printf("  Created task: %s\n", task.TaskId)
+		if owner != "" && repo != "" {
+			fmt.Printf("  GitHub source: %s/%s#%d\n", owner, repo, item.Content.Number)
+		}
 
 		// Update item status on GitHub
 		if err := updateItemStatus(project.ID, item.ID, statusField.ID, targetOptionID); err != nil {
@@ -323,4 +329,15 @@ func updateItemStatus(projectID, itemID, fieldID, optionID string) error {
 	}
 
 	return nil
+}
+
+// parseGitHubURL extracts owner and repo from a GitHub issue URL
+// Example: https://github.com/pmarsceill/mapcli/issues/42 -> "pmarsceill", "mapcli"
+func parseGitHubURL(url string) (owner, repo string) {
+	// Expected format: https://github.com/OWNER/REPO/issues/NUMBER
+	parts := strings.Split(url, "/")
+	if len(parts) >= 5 && parts[2] == "github.com" {
+		return parts[3], parts[4]
+	}
+	return "", ""
 }

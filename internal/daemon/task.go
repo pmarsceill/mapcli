@@ -36,14 +36,17 @@ func (r *TaskRouter) SubmitTask(ctx context.Context, req *mapv1.SubmitTaskReques
 	taskID := uuid.New().String()
 	now := time.Now()
 
-	// Create task record
+	// Create task record with optional GitHub source
 	record := &TaskRecord{
-		TaskID:      taskID,
-		Description: req.Description,
-		ScopePaths:  req.ScopePaths,
-		Status:      "pending",
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		TaskID:            taskID,
+		Description:       req.Description,
+		ScopePaths:        req.ScopePaths,
+		Status:            "pending",
+		CreatedAt:         now,
+		UpdatedAt:         now,
+		GitHubOwner:       req.GetGithubOwner(),
+		GitHubRepo:        req.GetGithubRepo(),
+		GitHubIssueNumber: int(req.GetGithubIssueNumber()),
 	}
 
 	if err := r.store.CreateTask(record); err != nil {
@@ -57,6 +60,15 @@ func (r *TaskRouter) SubmitTask(ctx context.Context, req *mapv1.SubmitTaskReques
 		Status:      mapv1.TaskStatus_TASK_STATUS_PENDING,
 		CreatedAt:   timestamppb.New(now),
 		UpdatedAt:   timestamppb.New(now),
+	}
+
+	// Add GitHub source if provided
+	if record.GitHubOwner != "" && record.GitHubRepo != "" && record.GitHubIssueNumber > 0 {
+		task.GithubSource = &mapv1.GitHubSource{
+			Owner:       record.GitHubOwner,
+			Repo:        record.GitHubRepo,
+			IssueNumber: int32(record.GitHubIssueNumber),
+		}
 	}
 
 	// Emit task created event
@@ -239,6 +251,32 @@ func taskRecordToProto(rec *TaskRecord) *mapv1.Task {
 	}
 }
 
+// taskRecordToProtoWithGitHub converts TaskRecord to proto including GitHub fields
+func (r *TaskRouter) taskRecordToProtoWithGitHub(rec *TaskRecord) *mapv1.Task {
+	task := &mapv1.Task{
+		TaskId:                rec.TaskID,
+		Description:           rec.Description,
+		ScopePaths:            rec.ScopePaths,
+		Status:                taskStatusFromString(rec.Status),
+		AssignedTo:            rec.AssignedTo,
+		Result:                rec.Result,
+		Error:                 rec.Error,
+		CreatedAt:             timestamppb.New(rec.CreatedAt),
+		UpdatedAt:             timestamppb.New(rec.UpdatedAt),
+		WaitingInputQuestion:  rec.WaitingInputQuestion,
+	}
+
+	if rec.GitHubOwner != "" && rec.GitHubRepo != "" && rec.GitHubIssueNumber > 0 {
+		task.GithubSource = &mapv1.GitHubSource{
+			Owner:       rec.GitHubOwner,
+			Repo:        rec.GitHubRepo,
+			IssueNumber: int32(rec.GitHubIssueNumber),
+		}
+	}
+
+	return task
+}
+
 func taskStatusFromString(s string) mapv1.TaskStatus {
 	switch s {
 	case "pending":
@@ -255,6 +293,8 @@ func taskStatusFromString(s string) mapv1.TaskStatus {
 		return mapv1.TaskStatus_TASK_STATUS_FAILED
 	case "cancelled":
 		return mapv1.TaskStatus_TASK_STATUS_CANCELLED
+	case "waiting_input":
+		return mapv1.TaskStatus_TASK_STATUS_WAITING_INPUT
 	default:
 		return mapv1.TaskStatus_TASK_STATUS_UNSPECIFIED
 	}

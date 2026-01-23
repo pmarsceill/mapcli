@@ -23,6 +23,8 @@ const (
 	DaemonService_ListTasks_FullMethodName         = "/map.v1.DaemonService/ListTasks"
 	DaemonService_GetTask_FullMethodName           = "/map.v1.DaemonService/GetTask"
 	DaemonService_CancelTask_FullMethodName        = "/map.v1.DaemonService/CancelTask"
+	DaemonService_RequestInput_FullMethodName      = "/map.v1.DaemonService/RequestInput"
+	DaemonService_GetCurrentTask_FullMethodName    = "/map.v1.DaemonService/GetCurrentTask"
 	DaemonService_Shutdown_FullMethodName          = "/map.v1.DaemonService/Shutdown"
 	DaemonService_GetStatus_FullMethodName         = "/map.v1.DaemonService/GetStatus"
 	DaemonService_WatchEvents_FullMethodName       = "/map.v1.DaemonService/WatchEvents"
@@ -45,6 +47,8 @@ type DaemonServiceClient interface {
 	ListTasks(ctx context.Context, in *ListTasksRequest, opts ...grpc.CallOption) (*ListTasksResponse, error)
 	GetTask(ctx context.Context, in *GetTaskRequest, opts ...grpc.CallOption) (*GetTaskResponse, error)
 	CancelTask(ctx context.Context, in *CancelTaskRequest, opts ...grpc.CallOption) (*CancelTaskResponse, error)
+	RequestInput(ctx context.Context, in *RequestInputRequest, opts ...grpc.CallOption) (*RequestInputResponse, error)
+	GetCurrentTask(ctx context.Context, in *GetCurrentTaskRequest, opts ...grpc.CallOption) (*GetCurrentTaskResponse, error)
 	// Daemon control
 	Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*ShutdownResponse, error)
 	GetStatus(ctx context.Context, in *GetStatusRequest, opts ...grpc.CallOption) (*GetStatusResponse, error)
@@ -102,6 +106,26 @@ func (c *daemonServiceClient) CancelTask(ctx context.Context, in *CancelTaskRequ
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CancelTaskResponse)
 	err := c.cc.Invoke(ctx, DaemonService_CancelTask_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) RequestInput(ctx context.Context, in *RequestInputRequest, opts ...grpc.CallOption) (*RequestInputResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RequestInputResponse)
+	err := c.cc.Invoke(ctx, DaemonService_RequestInput_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) GetCurrentTask(ctx context.Context, in *GetCurrentTaskRequest, opts ...grpc.CallOption) (*GetCurrentTaskResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCurrentTaskResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetCurrentTask_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -218,6 +242,8 @@ type DaemonServiceServer interface {
 	ListTasks(context.Context, *ListTasksRequest) (*ListTasksResponse, error)
 	GetTask(context.Context, *GetTaskRequest) (*GetTaskResponse, error)
 	CancelTask(context.Context, *CancelTaskRequest) (*CancelTaskResponse, error)
+	RequestInput(context.Context, *RequestInputRequest) (*RequestInputResponse, error)
+	GetCurrentTask(context.Context, *GetCurrentTaskRequest) (*GetCurrentTaskResponse, error)
 	// Daemon control
 	Shutdown(context.Context, *ShutdownRequest) (*ShutdownResponse, error)
 	GetStatus(context.Context, *GetStatusRequest) (*GetStatusResponse, error)
@@ -252,6 +278,12 @@ func (UnimplementedDaemonServiceServer) GetTask(context.Context, *GetTaskRequest
 }
 func (UnimplementedDaemonServiceServer) CancelTask(context.Context, *CancelTaskRequest) (*CancelTaskResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelTask not implemented")
+}
+func (UnimplementedDaemonServiceServer) RequestInput(context.Context, *RequestInputRequest) (*RequestInputResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RequestInput not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetCurrentTask(context.Context, *GetCurrentTaskRequest) (*GetCurrentTaskResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCurrentTask not implemented")
 }
 func (UnimplementedDaemonServiceServer) Shutdown(context.Context, *ShutdownRequest) (*ShutdownResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Shutdown not implemented")
@@ -369,6 +401,42 @@ func _DaemonService_CancelTask_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServiceServer).CancelTask(ctx, req.(*CancelTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_RequestInput_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RequestInputRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).RequestInput(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_RequestInput_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).RequestInput(ctx, req.(*RequestInputRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_GetCurrentTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCurrentTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetCurrentTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetCurrentTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetCurrentTask(ctx, req.(*GetCurrentTaskRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -550,6 +618,14 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelTask",
 			Handler:    _DaemonService_CancelTask_Handler,
+		},
+		{
+			MethodName: "RequestInput",
+			Handler:    _DaemonService_RequestInput_Handler,
+		},
+		{
+			MethodName: "GetCurrentTask",
+			Handler:    _DaemonService_GetCurrentTask_Handler,
 		},
 		{
 			MethodName: "Shutdown",

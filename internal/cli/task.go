@@ -201,6 +201,8 @@ func taskStatusString(s mapv1.TaskStatus) string {
 		return "failed"
 	case mapv1.TaskStatus_TASK_STATUS_CANCELLED:
 		return "cancelled"
+	case mapv1.TaskStatus_TASK_STATUS_WAITING_INPUT:
+		return "waiting_input"
 	default:
 		return "unknown"
 	}
