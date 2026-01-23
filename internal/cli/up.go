@@ -32,7 +32,7 @@ func init() {
 
 func runUp(cmd *cobra.Command, args []string) error {
 	// Check if already running
-	if client.IsDaemonRunning(socketPath) {
+	if client.IsDaemonRunning(getSocketPath()) {
 		fmt.Println("daemon is already running")
 		return nil
 	}
@@ -46,7 +46,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 func runForeground() error {
 	cfg := &daemon.Config{
-		SocketPath: socketPath,
+		SocketPath: getSocketPath(),
 		DataDir:    dataDir,
 	}
 
@@ -76,7 +76,7 @@ func runBackground() error {
 		return fmt.Errorf("get executable: %w", err)
 	}
 
-	args := []string{"up", "-f", "-s", socketPath}
+	args := []string{"up", "-f", "-s", getSocketPath()}
 	if dataDir != "" {
 		args = append(args, "-d", dataDir)
 	}

@@ -70,7 +70,7 @@ func init() {
 func runTaskSubmit(cmd *cobra.Command, args []string) error {
 	description := strings.Join(args, " ")
 
-	c, err := client.New(socketPath)
+	c, err := client.New(getSocketPath())
 	if err != nil {
 		return fmt.Errorf("connect to daemon: %w", err)
 	}
@@ -89,7 +89,7 @@ func runTaskSubmit(cmd *cobra.Command, args []string) error {
 }
 
 func runTaskList(cmd *cobra.Command, args []string) error {
-	c, err := client.New(socketPath)
+	c, err := client.New(getSocketPath())
 	if err != nil {
 		return fmt.Errorf("connect to daemon: %w", err)
 	}
@@ -130,7 +130,7 @@ func runTaskList(cmd *cobra.Command, args []string) error {
 func runTaskShow(cmd *cobra.Command, args []string) error {
 	taskID := args[0]
 
-	c, err := client.New(socketPath)
+	c, err := client.New(getSocketPath())
 	if err != nil {
 		return fmt.Errorf("connect to daemon: %w", err)
 	}
@@ -167,7 +167,7 @@ func runTaskShow(cmd *cobra.Command, args []string) error {
 func runTaskCancel(cmd *cobra.Command, args []string) error {
 	taskID := args[0]
 
-	c, err := client.New(socketPath)
+	c, err := client.New(getSocketPath())
 	if err != nil {
 		return fmt.Errorf("connect to daemon: %w", err)
 	}

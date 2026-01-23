@@ -49,11 +49,11 @@ func runClean(cmd *cobra.Command, args []string) error {
 	}
 
 	// 3. Remove socket file if it exists
-	if _, err := os.Stat(socketPath); err == nil {
-		if err := os.Remove(socketPath); err != nil {
-			fmt.Printf("warning: failed to remove socket %s: %v\n", socketPath, err)
+	if _, err := os.Stat(getSocketPath()); err == nil {
+		if err := os.Remove(getSocketPath()); err != nil {
+			fmt.Printf("warning: failed to remove socket %s: %v\n", getSocketPath(), err)
 		} else {
-			fmt.Printf("removed socket %s\n", socketPath)
+			fmt.Printf("removed socket %s\n", getSocketPath())
 			cleaned = true
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/pmarsceill/mapcli/internal/client"
 	mapv1 "github.com/pmarsceill/mapcli/proto/map/v1"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var agentCmd = &cobra.Command{
@@ -84,20 +85,42 @@ func init() {
 }
 
 func runAgentCreate(cmd *cobra.Command, args []string) error {
-	c, err := client.New(socketPath)
+	c, err := client.New(getSocketPath())
 	if err != nil {
 		return fmt.Errorf("connect to daemon: %w", err)
 	}
 	defer func() { _ = c.Close() }()
 
+	// Get flag values, using Viper defaults when flags aren't explicitly set
 	count, _ := cmd.Flags().GetInt("count")
+	if !cmd.Flags().Changed("count") {
+		count = viper.GetInt("agent.default-count")
+	}
+
 	branch, _ := cmd.Flags().GetString("branch")
+	if !cmd.Flags().Changed("branch") {
+		branch = viper.GetString("agent.default-branch")
+	}
+
 	noWorktree, _ := cmd.Flags().GetBool("no-worktree")
 	worktree, _ := cmd.Flags().GetBool("worktree")
+	if !cmd.Flags().Changed("worktree") && !cmd.Flags().Changed("no-worktree") {
+		worktree = viper.GetBool("agent.use-worktree")
+	}
+
 	name, _ := cmd.Flags().GetString("name")
 	prompt, _ := cmd.Flags().GetString("prompt")
+
 	agentType, _ := cmd.Flags().GetString("agent-type")
+	if !cmd.Flags().Changed("agent-type") {
+		agentType = viper.GetString("agent.default-type")
+	}
+
 	requirePermissions, _ := cmd.Flags().GetBool("require-permissions")
+	skipPermissions := !requirePermissions
+	if !cmd.Flags().Changed("require-permissions") {
+		skipPermissions = viper.GetBool("agent.skip-permissions")
+	}
 
 	// Validate agent type
 	if agentType != "claude" && agentType != "codex" {
@@ -106,9 +129,6 @@ func runAgentCreate(cmd *cobra.Command, args []string) error {
 
 	// no-worktree overrides worktree
 	useWorktree := worktree && !noWorktree
-
-	// Skip permissions by default for autonomous operation (inverted from require-permissions flag)
-	skipPermissions := !requirePermissions
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -157,7 +177,7 @@ func runAgentCreate(cmd *cobra.Command, args []string) error {
 }
 
 func runAgentList(cmd *cobra.Command, args []string) error {
-	c, err := client.New(socketPath)
+	c, err := client.New(getSocketPath())
 	if err != nil {
 		return fmt.Errorf("connect to daemon: %w", err)
 	}
@@ -194,7 +214,7 @@ func runAgentKill(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool("force")
 	killAll, _ := cmd.Flags().GetBool("all")
 
-	c, err := client.New(socketPath)
+	c, err := client.New(getSocketPath())
 	if err != nil {
 		return fmt.Errorf("connect to daemon: %w", err)
 	}
@@ -269,7 +289,7 @@ func runAgentKill(cmd *cobra.Command, args []string) error {
 func runAgentRespawn(cmd *cobra.Command, args []string) error {
 	agentID := args[0]
 
-	c, err := client.New(socketPath)
+	c, err := client.New(getSocketPath())
 	if err != nil {
 		return fmt.Errorf("connect to daemon: %w", err)
 	}

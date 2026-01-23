@@ -4,7 +4,13 @@
 
 A tool for spawning and managing multiple AI coding agents (Claude Code and OpenAI Codex) with a Docker-like architecture: thin CLI (`map`) + local daemon (`mapd`).
 
+**Run Claude Code and Codex agents in parallel**
+
 https://github.com/user-attachments/assets/1e0f02fe-fdbb-4cf7-bff4-a2161662b7a2
+
+**Sync gh projects / issues**
+
+https://github.com/user-attachments/assets/f418e6c3-bfff-4859-b7d4-938eecfa4934
 
 ## Installation
 
@@ -15,6 +21,61 @@ curl -fsSL https://raw.githubusercontent.com/pmarsceill/mapcli/main/install.sh |
 ```
 
 This installs both `map` and `mapd` to `~/.local/bin`. Make sure this directory is in your PATH.
+
+### System Requirements
+
+MAP requires the following tools to be installed and available in your PATH:
+
+| Dependency | Required For | Version |
+|------------|--------------|---------|
+| **git** | Worktree isolation | 2.15+ (worktree support) |
+| **tmux** | Agent session management | Any recent version |
+| **claude** | Claude Code agents | Latest (optional if only using Codex) |
+| **codex** | OpenAI Codex agents | Latest (optional if only using Claude) |
+
+At least one of `claude` or `codex` must be installed depending on which agent type you want to use.
+
+**Installing Dependencies:**
+
+<details>
+<summary>macOS (Homebrew)</summary>
+
+```bash
+brew install git tmux
+# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
+# Codex CLI: https://github.com/openai/codex
+```
+</details>
+
+<details>
+<summary>Ubuntu/Debian</summary>
+
+```bash
+sudo apt update && sudo apt install git tmux
+# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
+# Codex CLI: https://github.com/openai/codex
+```
+</details>
+
+<details>
+<summary>Fedora/RHEL</summary>
+
+```bash
+sudo dnf install git tmux
+# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
+# Codex CLI: https://github.com/openai/codex
+```
+</details>
+
+<details>
+<summary>Arch Linux</summary>
+
+```bash
+sudo pacman -S git tmux
+# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
+# Codex CLI: https://github.com/openai/codex
+```
+</details>
 
 **Manual installation:**
 
@@ -99,6 +160,9 @@ This creates two binaries in `bin/`:
 | `map down [-f]` | Stop the daemon (force immediate shutdown with -f) |
 | `map clean` | Clean up orphaned processes, tmux sessions, and socket files |
 | `map watch` | Stream real-time events from the daemon |
+| `map config list` | List all configuration values |
+| `map config get <key>` | Get a configuration value |
+| `map config set <key> <value>` | Set a configuration value |
 
 ### Agent Management
 
@@ -417,11 +481,64 @@ mapcli/
 
 ## Configuration
 
+MAP supports persistent configuration via a YAML file at `~/.mapd/config.yaml`. Configuration values can be set via:
+
+1. **CLI flags** (highest priority)
+2. **Environment variables** (with `MAP_` prefix)
+3. **Config file** (`~/.mapd/config.yaml`)
+4. **Defaults** (lowest priority)
+
+### Config Commands
+
+| Command | Description |
+|---------|-------------|
+| `map config list` | List all configuration values (alias: `ls`) |
+| `map config get <key>` | Get a specific configuration value |
+| `map config set <key> <value>` | Set and persist a configuration value |
+
+### Configuration File
+
+```yaml
+# ~/.mapd/config.yaml
+socket: /tmp/mapd.sock
+data-dir: ~/.mapd
+
+agent:
+  default-type: claude        # claude or codex
+  default-count: 1            # number of agents to spawn
+  default-branch: ""          # git branch for worktrees
+  use-worktree: true          # worktree isolation
+  skip-permissions: true      # skip permission prompts
+```
+
+### Configuration Options
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `socket` | `/tmp/mapd.sock` | Unix socket path for daemon communication |
+| `data-dir` | `~/.mapd` | Data directory for SQLite and worktrees |
+| `agent.default-type` | `claude` | Default agent type (`claude` or `codex`) |
+| `agent.default-count` | `1` | Default number of agents to spawn |
+| `agent.default-branch` | `""` | Default git branch for worktrees (empty = current branch) |
+| `agent.use-worktree` | `true` | Use worktree isolation by default |
+| `agent.skip-permissions` | `true` | Skip permission prompts by default |
+
+### Environment Variables
+
+All configuration options can be set via environment variables with the `MAP_` prefix. Nested keys use underscores:
+
+```bash
+export MAP_SOCKET=/custom/path.sock
+export MAP_AGENT_DEFAULT_TYPE=codex
+export MAP_AGENT_DEFAULT_COUNT=3
+```
+
 ### Global CLI Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-s, --socket` | `/tmp/mapd.sock` | Unix socket path for daemon communication |
+| `--config` | `~/.mapd/config.yaml` | Path to config file |
 
 ### Daemon (`map up`)
 
@@ -429,49 +546,6 @@ mapcli/
 |------|---------|-------------|
 | `-f, --foreground` | `false` | Run daemon in foreground |
 | `-d, --data-dir` | `~/.mapd` | Data directory for SQLite |
-
-## System Requirements
-
-MAP requires the following tools to be installed and available in your PATH:
-
-| Dependency | Required For | Version |
-|------------|--------------|---------|
-| **git** | Worktree isolation | 2.15+ (worktree support) |
-| **tmux** | Agent session management | Any recent version |
-| **claude** | Claude Code agents | Latest (optional if only using Codex) |
-| **codex** | OpenAI Codex agents | Latest (optional if only using Claude) |
-
-At least one of `claude` or `codex` must be installed depending on which agent type you want to use.
-
-### Installing Dependencies
-
-**macOS (Homebrew):**
-```bash
-brew install git tmux
-# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
-# Codex CLI: https://github.com/openai/codex
-```
-
-**Ubuntu/Debian:**
-```bash
-sudo apt update && sudo apt install git tmux
-# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
-# Codex CLI: https://github.com/openai/codex
-```
-
-**Fedora/RHEL:**
-```bash
-sudo dnf install git tmux
-# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
-# Codex CLI: https://github.com/openai/codex
-```
-
-**Arch Linux:**
-```bash
-sudo pacman -S git tmux
-# Claude CLI: https://docs.anthropic.com/en/docs/claude-code
-# Codex CLI: https://github.com/openai/codex
-```
 
 ## Development
 
@@ -533,6 +607,7 @@ Core runtime dependencies:
 | Package | Purpose |
 |---------|---------|
 | `github.com/spf13/cobra` | CLI framework |
+| `github.com/spf13/viper` | Configuration management |
 | `google.golang.org/grpc` | gRPC communication |
 | `google.golang.org/protobuf` | Protocol buffer support |
 | `modernc.org/sqlite` | SQLite database (pure Go) |
