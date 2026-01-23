@@ -1,24 +1,44 @@
 package daemon
 
 import (
+	"os/exec"
 	"slices"
 	"testing"
 	"time"
 )
 
+// mockMultiplexer implements Multiplexer interface for testing
+type mockMultiplexer struct{}
+
+func (m *mockMultiplexer) CreateSession(name, workdir, command string) error { return nil }
+func (m *mockMultiplexer) KillSession(name string) error                     { return nil }
+func (m *mockMultiplexer) HasSession(name string) bool                       { return true }
+func (m *mockMultiplexer) ListSessions(prefix string) ([]string, error)      { return nil, nil }
+func (m *mockMultiplexer) SendText(sessionName, text string) error           { return nil }
+func (m *mockMultiplexer) SendEnter(sessionName string) error                { return nil }
+func (m *mockMultiplexer) RespawnPane(sessionName, command string) error     { return nil }
+func (m *mockMultiplexer) GetPaneWorkdir(sessionName string) string          { return "" }
+func (m *mockMultiplexer) GetPaneTitle(sessionName string) string            { return "mock" }
+func (m *mockMultiplexer) IsPaneDead(sessionName string) bool                { return false }
+func (m *mockMultiplexer) AttachCommand(sessionName string) *exec.Cmd        { return nil }
+func (m *mockMultiplexer) ConfigureSession(sessionName string, opts SessionOptions) error {
+	return nil
+}
+func (m *mockMultiplexer) Name() string { return "mock" }
+
 func TestProcessManager_AgentTracking(t *testing.T) {
-	manager := NewProcessManager("/tmp/logs", nil)
+	manager := NewProcessManager("/tmp/logs", nil, &mockMultiplexer{})
 
 	idleSlot := &AgentSlot{
 		AgentID:     "agent-idle",
-		TmuxSession: "tmux-idle",
+		SessionName: "session-idle",
 		CreatedAt:   time.Now(),
 		Status:      AgentStatusIdle,
 		AgentType:   AgentTypeClaude,
 	}
 	busySlot := &AgentSlot{
 		AgentID:     "agent-busy",
-		TmuxSession: "tmux-busy",
+		SessionName: "session-busy",
 		CreatedAt:   time.Now(),
 		Status:      AgentStatusBusy,
 		AgentType:   AgentTypeCodex,
@@ -27,11 +47,11 @@ func TestProcessManager_AgentTracking(t *testing.T) {
 	manager.agents[idleSlot.AgentID] = idleSlot
 	manager.agents[busySlot.AgentID] = busySlot
 
-	if got := manager.GetTmuxSession("agent-idle"); got != "tmux-idle" {
-		t.Errorf("GetTmuxSession = %q, want %q", got, "tmux-idle")
+	if got := manager.GetSessionName("agent-idle"); got != "session-idle" {
+		t.Errorf("GetSessionName = %q, want %q", got, "session-idle")
 	}
-	if got := manager.GetTmuxSession("missing"); got != "" {
-		t.Errorf("GetTmuxSession(missing) = %q, want empty", got)
+	if got := manager.GetSessionName("missing"); got != "" {
+		t.Errorf("GetSessionName(missing) = %q, want empty", got)
 	}
 
 	slot := manager.FindAvailableAgent()
@@ -58,11 +78,11 @@ func TestProcessManager_AgentTracking(t *testing.T) {
 }
 
 func TestProcessManager_Remove(t *testing.T) {
-	manager := NewProcessManager("/tmp/logs", nil)
+	manager := NewProcessManager("/tmp/logs", nil, &mockMultiplexer{})
 
 	manager.agents["agent-1"] = &AgentSlot{
 		AgentID:     "agent-1",
-		TmuxSession: "tmux-missing",
+		SessionName: "session-missing",
 		CreatedAt:   time.Now(),
 		Status:      AgentStatusIdle,
 	}

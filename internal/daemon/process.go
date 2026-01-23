@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -15,21 +14,22 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// ProcessManager manages spawned Claude Code agent slots using tmux sessions
+// ProcessManager manages spawned Claude Code agent slots using terminal multiplexers
 type ProcessManager struct {
 	mu               sync.RWMutex
 	agents           map[string]*AgentSlot
 	eventCh          chan *mapv1.Event
 	logsDir          string
-	lastAssigned     string // ID of last agent assigned a task (for round-robin)
-	onAgentAvailable func() // callback when an agent becomes available
+	lastAssigned     string       // ID of last agent assigned a task (for round-robin)
+	onAgentAvailable func()       // callback when an agent becomes available
+	multiplexer      Multiplexer  // terminal multiplexer (tmux or zellij)
 }
 
-// AgentSlot represents an agent running in a tmux session
+// AgentSlot represents an agent running in a terminal multiplexer session
 type AgentSlot struct {
 	AgentID      string
 	WorktreePath string
-	TmuxSession  string // tmux session name
+	SessionName  string // multiplexer session name (tmux or zellij)
 	CreatedAt    time.Time
 	Status       string // "idle", "busy"
 	CurrentTask  string // current task ID if busy
@@ -50,16 +50,22 @@ const (
 	AgentTypeCodex  = "codex"
 )
 
-// tmux session prefix to avoid conflicts
-const tmuxPrefix = "map-agent-"
+// session prefix to avoid conflicts with other multiplexer sessions
+const sessionPrefix = "map-agent-"
 
-// NewProcessManager creates a new process manager
-func NewProcessManager(logsDir string, eventCh chan *mapv1.Event) *ProcessManager {
+// NewProcessManager creates a new process manager with the specified multiplexer
+func NewProcessManager(logsDir string, eventCh chan *mapv1.Event, mux Multiplexer) *ProcessManager {
 	return &ProcessManager{
-		agents:  make(map[string]*AgentSlot),
-		eventCh: eventCh,
-		logsDir: logsDir,
+		agents:      make(map[string]*AgentSlot),
+		eventCh:     eventCh,
+		logsDir:     logsDir,
+		multiplexer: mux,
 	}
+}
+
+// GetMultiplexer returns the multiplexer being used
+func (m *ProcessManager) GetMultiplexer() Multiplexer {
+	return m.multiplexer
 }
 
 // SetOnAgentAvailable sets a callback that is invoked when an agent becomes available.
@@ -70,7 +76,7 @@ func (m *ProcessManager) SetOnAgentAvailable(callback func()) {
 	m.onAgentAvailable = callback
 }
 
-// CreateSlot creates a new agent with a tmux session running claude or codex
+// CreateSlot creates a new agent with a multiplexer session running claude or codex
 // agentType should be "claude" (default) or "codex"
 // If skipPermissions is true, the agent is started with permission-bypassing flags
 func (m *ProcessManager) CreateSlot(agentID, workdir, agentType string, skipPermissions bool) (*AgentSlot, error) {
@@ -85,11 +91,6 @@ func (m *ProcessManager) CreateSlot(agentID, workdir, agentType string, skipPerm
 	// Check if agent already exists
 	if _, exists := m.agents[agentID]; exists {
 		return nil, fmt.Errorf("agent %s already exists", agentID)
-	}
-
-	// Check if tmux is available
-	if _, err := exec.LookPath("tmux"); err != nil {
-		return nil, fmt.Errorf("tmux not found in PATH: %w", err)
 	}
 
 	// Determine CLI binary and flags based on agent type
@@ -117,39 +118,25 @@ func (m *ProcessManager) CreateSlot(agentID, workdir, agentType string, skipPerm
 		}
 	}
 
-	tmuxSession := tmuxPrefix + agentID
+	sessionName := sessionPrefix + agentID
 
-	// Create tmux session with the agent CLI running in it
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", tmuxSession, "-c", workdir, cliCmd)
-	cmd.Env = os.Environ()
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("failed to create tmux session: %w", err)
+	// Create multiplexer session with the agent CLI running in it
+	if err := m.multiplexer.CreateSession(sessionName, workdir, cliCmd); err != nil {
+		return nil, err
 	}
 
-	// Configure tmux session for better resilience
-	// - mouse: enable scrolling
-	// - remain-on-exit: keep pane open if agent exits (prevents accidental Ctrl+C from killing session)
-	// - @map_cli_cmd: store the CLI command for respawn keybinding
-	// - bind R: respawn the agent with Ctrl+b R
-	_ = exec.Command("tmux", "set-option", "-t", tmuxSession, "mouse", "on").Run()
-	_ = exec.Command("tmux", "set-option", "-t", tmuxSession, "remain-on-exit", "on").Run()
-	_ = exec.Command("tmux", "set-option", "-t", tmuxSession, "@map_cli_cmd", cliCmd).Run()
-	_ = exec.Command("tmux", "bind-key", "-t", tmuxSession, "R", "respawn-pane", "-k", cliCmd).Run()
-
-	// Add agent ID to the status-right for easy identification
-	statusRight := fmt.Sprintf(" [%s] %%H %%H:%%M %%d-%%b-%%y", agentID)
-	_ = exec.Command("tmux", "set-option", "-t", tmuxSession, "status-right", statusRight).Run()
-
-	// Apply a subtle theme (neutral grays that work on both dark and light terminals)
-	_ = exec.Command("tmux", "set-option", "-t", tmuxSession, "status-style", "bg=colour240,fg=colour255").Run()
-	_ = exec.Command("tmux", "set-option", "-t", tmuxSession, "status-left-style", "bg=colour243,fg=colour255").Run()
-	_ = exec.Command("tmux", "set-option", "-t", tmuxSession, "status-right-style", "bg=colour243,fg=colour255").Run()
-	_ = exec.Command("tmux", "set-option", "-t", tmuxSession, "window-status-current-style", "bg=colour245,fg=colour232,bold").Run()
+	// Configure session for better resilience
+	opts := SessionOptions{
+		AgentID:      agentID,
+		MouseEnabled: true,
+		CLICommand:   cliCmd,
+	}
+	_ = m.multiplexer.ConfigureSession(sessionName, opts)
 
 	slot := &AgentSlot{
 		AgentID:      agentID,
 		WorktreePath: workdir,
-		TmuxSession:  tmuxSession,
+		SessionName:  sessionName,
 		CreatedAt:    time.Now(),
 		Status:       AgentStatusIdle,
 		AgentType:    agentType,
@@ -163,7 +150,8 @@ func (m *ProcessManager) CreateSlot(agentID, workdir, agentType string, skipPerm
 	// Emit connected event
 	m.emitAgentEvent(slot, true)
 
-	log.Printf("created %s agent %s with tmux session %s (workdir: %s)", cliBinary, agentID, tmuxSession, workdir)
+	muxName := m.multiplexer.Name()
+	log.Printf("created %s agent %s with %s session %s (workdir: %s)", cliBinary, agentID, muxName, sessionName, workdir)
 
 	// Notify that an agent is available (for pending task processing)
 	if callback != nil {
@@ -173,7 +161,7 @@ func (m *ProcessManager) CreateSlot(agentID, workdir, agentType string, skipPerm
 	return slot, nil
 }
 
-// ExecuteTask sends a task to the agent's tmux session
+// ExecuteTask sends a task to the agent's multiplexer session
 func (m *ProcessManager) ExecuteTask(ctx context.Context, agentID string, taskID string, description string, scopePaths []string) (string, error) {
 	m.mu.RLock()
 	slot, exists := m.agents[agentID]
@@ -191,7 +179,7 @@ func (m *ProcessManager) ExecuteTask(ctx context.Context, agentID string, taskID
 	}
 	slot.Status = AgentStatusBusy
 	slot.CurrentTask = taskID
-	tmuxSession := slot.TmuxSession
+	sessionName := slot.SessionName
 	slot.mu.Unlock()
 
 	// Ensure we release the slot when done and notify about availability
@@ -210,7 +198,8 @@ func (m *ProcessManager) ExecuteTask(ctx context.Context, agentID string, taskID
 		}
 	}()
 
-	log.Printf("agent %s executing task %s via tmux", agentID, taskID)
+	muxName := m.multiplexer.Name()
+	log.Printf("agent %s executing task %s via %s", agentID, taskID, muxName)
 
 	// Build the prompt
 	prompt := description
@@ -218,45 +207,42 @@ func (m *ProcessManager) ExecuteTask(ctx context.Context, agentID string, taskID
 		prompt = fmt.Sprintf("%s\n\nScope/files: %s", prompt, strings.Join(scopePaths, ", "))
 	}
 
-	// Send the prompt to the tmux session
+	// Send the prompt to the multiplexer session
 	// Replace newlines with spaces to keep as single-line input for the CLI
 	singleLinePrompt := strings.ReplaceAll(prompt, "\n", " ")
 	singleLinePrompt = strings.ReplaceAll(singleLinePrompt, "  ", " ") // collapse double spaces
 
-	// Use tmux send-keys with -l (literal) flag to send text, then Enter separately
-	// This ensures the text is sent exactly as-is without tmux interpreting special chars
-	cmd := exec.CommandContext(ctx, "tmux", "send-keys", "-t", tmuxSession, "-l", singleLinePrompt)
-	if err := cmd.Run(); err != nil {
+	// Send text to the session
+	if err := m.multiplexer.SendText(sessionName, singleLinePrompt); err != nil {
 		log.Printf("agent %s task %s failed to send text: %v", agentID, taskID, err)
-		return "", fmt.Errorf("failed to send task to tmux: %w", err)
+		return "", err
 	}
 
 	// Send Enter key to submit the prompt
-	cmd = exec.CommandContext(ctx, "tmux", "send-keys", "-t", tmuxSession, "Enter")
-	if err := cmd.Run(); err != nil {
+	if err := m.multiplexer.SendEnter(sessionName); err != nil {
 		log.Printf("agent %s task %s failed to send Enter: %v", agentID, taskID, err)
-		return "", fmt.Errorf("failed to submit task to tmux: %w", err)
+		return "", err
 	}
 
-	log.Printf("agent %s task %s sent to tmux session", agentID, taskID)
+	log.Printf("agent %s task %s sent to %s session", agentID, taskID, muxName)
 
-	// Note: With tmux, we don't wait for completion or capture output
+	// Note: We don't wait for completion or capture output
 	// The user interacts directly with the session
-	return "Task sent to agent's tmux session. Use 'map agent watch' to interact.", nil
+	return "Task sent to agent's session. Use 'map agent watch' to interact.", nil
 }
 
-// GetTmuxSession returns the tmux session name for an agent
-func (m *ProcessManager) GetTmuxSession(agentID string) string {
+// GetSessionName returns the multiplexer session name for an agent
+func (m *ProcessManager) GetSessionName(agentID string) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if slot, ok := m.agents[agentID]; ok {
-		return slot.TmuxSession
+		return slot.SessionName
 	}
 	return ""
 }
 
-// HasTmuxSession checks if a tmux session exists for the agent
-func (m *ProcessManager) HasTmuxSession(agentID string) bool {
+// HasSession checks if a multiplexer session exists for the agent
+func (m *ProcessManager) HasSession(agentID string) bool {
 	m.mu.RLock()
 	slot, exists := m.agents[agentID]
 	m.mu.RUnlock()
@@ -265,9 +251,8 @@ func (m *ProcessManager) HasTmuxSession(agentID string) bool {
 		return false
 	}
 
-	// Check if tmux session actually exists
-	cmd := exec.Command("tmux", "has-session", "-t", slot.TmuxSession)
-	return cmd.Run() == nil
+	// Check if session actually exists
+	return m.multiplexer.HasSession(slot.SessionName)
 }
 
 // FindAvailableAgent finds an idle agent slot using round-robin selection
@@ -312,24 +297,24 @@ func (m *ProcessManager) FindAvailableAgent() *AgentSlot {
 	return nil
 }
 
-// Remove removes an agent slot and kills its tmux session
+// Remove removes an agent slot and kills its multiplexer session
 func (m *ProcessManager) Remove(agentID string) {
 	m.mu.Lock()
 	slot, exists := m.agents[agentID]
 	if exists {
 		delete(m.agents, agentID)
 	}
+	mux := m.multiplexer
 	m.mu.Unlock()
 
 	if exists {
-		// Kill the tmux session
-		cmd := exec.Command("tmux", "kill-session", "-t", slot.TmuxSession)
-		if err := cmd.Run(); err != nil {
-			log.Printf("warning: failed to kill tmux session %s: %v", slot.TmuxSession, err)
+		// Kill the multiplexer session
+		if err := mux.KillSession(slot.SessionName); err != nil {
+			log.Printf("warning: failed to kill %s session %s: %v", mux.Name(), slot.SessionName, err)
 		}
 
 		m.emitAgentEvent(slot, false)
-		log.Printf("removed agent %s and killed tmux session %s", agentID, slot.TmuxSession)
+		log.Printf("removed agent %s and killed %s session %s", agentID, mux.Name(), slot.SessionName)
 	}
 }
 
@@ -414,9 +399,9 @@ func (slot *AgentSlot) ToProto() *mapv1.SpawnedAgentInfo {
 		AgentId:      slot.AgentID,
 		WorktreePath: slot.WorktreePath,
 		Pid:          0,
-		Status:       GetTmuxPaneTitle(slot.TmuxSession),
+		Status:       slot.Status,
 		CreatedAt:    timestamppb.New(slot.CreatedAt),
-		LogFile:      slot.TmuxSession, // Repurpose LogFile to show tmux session
+		LogFile:      slot.SessionName, // Repurpose LogFile to show multiplexer session
 		AgentType:    slot.AgentType,
 	}
 }
@@ -427,9 +412,14 @@ func (m *ProcessManager) emitAgentEvent(slot *AgentSlot, connected bool) {
 		return
 	}
 
+	muxName := "session"
+	if m.multiplexer != nil {
+		muxName = m.multiplexer.Name()
+	}
+
 	message := fmt.Sprintf("agent %s disconnected", slot.AgentID)
 	if connected {
-		message = fmt.Sprintf("agent %s connected (tmux: %s)", slot.AgentID, slot.TmuxSession)
+		message = fmt.Sprintf("agent %s connected (%s: %s)", slot.AgentID, muxName, slot.SessionName)
 	}
 
 	event := &mapv1.Event{
@@ -457,7 +447,7 @@ func (m *ProcessManager) Spawn(agentID, workdir, prompt, agentType string, skipP
 		return nil, err
 	}
 
-	// If a prompt was provided, send it to the tmux session
+	// If a prompt was provided, send it to the multiplexer session
 	if prompt != "" {
 		// Give the agent a moment to start up
 		time.Sleep(500 * time.Millisecond)
@@ -466,14 +456,12 @@ func (m *ProcessManager) Spawn(agentID, workdir, prompt, agentType string, skipP
 		singleLinePrompt := strings.ReplaceAll(prompt, "\n", " ")
 		singleLinePrompt = strings.ReplaceAll(singleLinePrompt, "  ", " ")
 
-		// Send text with -l (literal) flag, then Enter separately
-		cmd := exec.Command("tmux", "send-keys", "-t", slot.TmuxSession, "-l", singleLinePrompt)
-		if err := cmd.Run(); err != nil {
+		// Send text to the session
+		if err := m.multiplexer.SendText(slot.SessionName, singleLinePrompt); err != nil {
 			log.Printf("warning: failed to send initial prompt text to %s: %v", agentID, err)
 		} else {
 			// Send Enter to submit
-			cmd = exec.Command("tmux", "send-keys", "-t", slot.TmuxSession, "Enter")
-			if err := cmd.Run(); err != nil {
+			if err := m.multiplexer.SendEnter(slot.SessionName); err != nil {
 				log.Printf("warning: failed to send Enter to %s: %v", agentID, err)
 			} else {
 				log.Printf("sent initial prompt to agent %s", agentID)
@@ -484,62 +472,34 @@ func (m *ProcessManager) Spawn(agentID, workdir, prompt, agentType string, skipP
 	return slot, nil
 }
 
-// ListTmuxSessions returns all map agent tmux sessions (including orphaned ones)
+// ListSessions returns all map agent sessions for a given multiplexer (including orphaned ones)
+func ListSessions(mux Multiplexer) ([]string, error) {
+	return mux.ListSessions(sessionPrefix)
+}
+
+// ListTmuxSessions returns all map agent tmux sessions (for backwards compatibility)
 func ListTmuxSessions() ([]string, error) {
-	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}")
-	output, err := cmd.Output()
+	mux, err := NewTmuxMultiplexer()
 	if err != nil {
-		// No sessions is not an error
-		return nil, nil
+		return nil, nil // tmux not available, return empty
 	}
-
-	var sessions []string
-	for line := range strings.SplitSeq(strings.TrimSpace(string(output)), "\n") {
-		if strings.HasPrefix(line, tmuxPrefix) {
-			sessions = append(sessions, line)
-		}
-	}
-	return sessions, nil
+	return mux.ListSessions(sessionPrefix)
 }
 
-// GetTmuxSessionDir returns the working directory of a tmux session
-func GetTmuxSessionDir(sessionName string) string {
-	cmd := exec.Command("tmux", "display-message", "-t", sessionName, "-p", "#{pane_current_path}")
-	output, err := cmd.Output()
+// ListZellijSessions returns all map agent Zellij sessions
+func ListZellijSessions() ([]string, error) {
+	mux, err := NewZellijMultiplexer()
 	if err != nil {
-		return ""
+		return nil, nil // zellij not available, return empty
 	}
-	return strings.TrimSpace(string(output))
+	return mux.ListSessions(sessionPrefix)
 }
 
-// GetTmuxPaneTitle returns the pane title of a tmux session (used as status display)
-func GetTmuxPaneTitle(sessionName string) string {
-	cmd := exec.Command("tmux", "display-message", "-t", sessionName, "-p", "#{pane_title}")
-	output, err := cmd.Output()
-	if err != nil {
-		return "unknown"
-	}
-	title := strings.TrimSpace(string(output))
-	if title == "" {
-		return "idle"
-	}
-	return title
-}
-
-// IsTmuxPaneDead checks if the pane's process has exited (remain-on-exit keeps pane open)
-func IsTmuxPaneDead(sessionName string) bool {
-	cmd := exec.Command("tmux", "display-message", "-t", sessionName, "-p", "#{pane_dead}")
-	output, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	return strings.TrimSpace(string(output)) == "1"
-}
-
-// RespawnInPane respawns the agent process in a dead tmux pane
+// RespawnInPane respawns the agent process in a dead pane
 func (m *ProcessManager) RespawnInPane(agentID string, skipPermissions bool) error {
 	m.mu.RLock()
 	slot, exists := m.agents[agentID]
+	mux := m.multiplexer
 	m.mu.RUnlock()
 
 	if !exists {
@@ -547,13 +507,12 @@ func (m *ProcessManager) RespawnInPane(agentID string, skipPermissions bool) err
 	}
 
 	// Check if session exists
-	checkCmd := exec.Command("tmux", "has-session", "-t", slot.TmuxSession)
-	if err := checkCmd.Run(); err != nil {
-		return fmt.Errorf("tmux session %s not found", slot.TmuxSession)
+	if !mux.HasSession(slot.SessionName) {
+		return fmt.Errorf("%s session %s not found", mux.Name(), slot.SessionName)
 	}
 
-	// Check if pane is dead
-	if !IsTmuxPaneDead(slot.TmuxSession) {
+	// Check if pane is dead (for multiplexers that support this)
+	if !mux.IsPaneDead(slot.SessionName) {
 		return fmt.Errorf("agent %s pane is still running - cannot respawn", agentID)
 	}
 
@@ -579,8 +538,7 @@ func (m *ProcessManager) RespawnInPane(agentID string, skipPermissions bool) err
 		}
 	}
 
-	cmd := exec.Command("tmux", "respawn-pane", "-t", slot.TmuxSession, "-k", cliCmd)
-	if err := cmd.Run(); err != nil {
+	if err := mux.RespawnPane(slot.SessionName, cliCmd); err != nil {
 		return fmt.Errorf("failed to respawn %s in pane: %w", agentType, err)
 	}
 

@@ -45,8 +45,9 @@ type Server struct {
 
 // Config holds daemon configuration
 type Config struct {
-	SocketPath string
-	DataDir    string
+	SocketPath  string
+	DataDir     string
+	Multiplexer string // "tmux" (default) or "zellij"
 }
 
 // NewServer creates a new daemon server
@@ -70,7 +71,18 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, fmt.Errorf("init worktree manager: %w", err)
 	}
 
-	processes := NewProcessManager(cfg.DataDir, eventCh)
+	// Initialize multiplexer based on config or environment
+	muxType := GetMultiplexerType()
+	if cfg.Multiplexer != "" {
+		muxType = MultiplexerType(cfg.Multiplexer)
+	}
+	mux, err := NewMultiplexer(muxType)
+	if err != nil {
+		return nil, fmt.Errorf("init multiplexer (%s): %w", muxType, err)
+	}
+	log.Printf("using %s as terminal multiplexer", mux.Name())
+
+	processes := NewProcessManager(cfg.DataDir, eventCh, mux)
 	tasks := NewTaskRouter(store, processes, eventCh)
 	names := NewNameGenerator()
 
@@ -214,12 +226,18 @@ func (s *Server) GetStatus(ctx context.Context, req *mapv1.GetStatusRequest) (*m
 	pending, active, _ := s.store.GetStats()
 	spawnedAgents := len(s.processes.List())
 
+	muxName := ""
+	if mux := s.processes.GetMultiplexer(); mux != nil {
+		muxName = mux.Name()
+	}
+
 	return &mapv1.GetStatusResponse{
 		Running:         true,
 		StartedAt:       timestamppb.New(s.startedAt),
 		ConnectedAgents: int32(spawnedAgents),
 		PendingTasks:    int32(pending),
 		ActiveTasks:     int32(active),
+		Multiplexer:     muxName,
 	}, nil
 }
 
@@ -350,7 +368,11 @@ func (s *Server) SpawnAgent(ctx context.Context, req *mapv1.SpawnAgentRequest) (
 			log.Printf("failed to store spawned agent %s: %v", agentID, err)
 		}
 
-		agents = append(agents, slot.ToProto())
+		info := slot.ToProto()
+		if mux := s.processes.GetMultiplexer(); mux != nil {
+			info.Multiplexer = mux.Name()
+		}
+		agents = append(agents, info)
 
 		log.Printf("created %s agent %s in %s", agentType, agentID, workdir)
 	}
@@ -396,10 +418,16 @@ func (s *Server) KillAgent(ctx context.Context, req *mapv1.KillAgentRequest) (*m
 
 func (s *Server) ListSpawnedAgents(ctx context.Context, req *mapv1.ListSpawnedAgentsRequest) (*mapv1.ListSpawnedAgentsResponse, error) {
 	processes := s.processes.List()
+	muxName := ""
+	if mux := s.processes.GetMultiplexer(); mux != nil {
+		muxName = mux.Name()
+	}
 
 	agents := make([]*mapv1.SpawnedAgentInfo, 0, len(processes))
 	for _, sp := range processes {
-		agents = append(agents, sp.ToProto())
+		info := sp.ToProto()
+		info.Multiplexer = muxName
+		agents = append(agents, info)
 	}
 
 	return &mapv1.ListSpawnedAgentsResponse{Agents: agents}, nil

@@ -10,25 +10,31 @@ import (
 	"time"
 
 	"github.com/pmarsceill/mapcli/internal/client"
+	"github.com/pmarsceill/mapcli/internal/daemon"
 	mapv1 "github.com/pmarsceill/mapcli/proto/map/v1"
 	"github.com/spf13/cobra"
 )
 
 var agentWatchCmd = &cobra.Command{
 	Use:   "watch [agent-id]",
-	Short: "Attach to an agent's tmux session",
-	Long: `Attach to a spawned agent's tmux session for full interactivity.
+	Short: "Attach to an agent's terminal session",
+	Long: `Attach to a spawned agent's terminal multiplexer session for full interactivity.
 
 You can accept tools, approve changes, and interact with Claude directly.
-Use standard tmux controls:
+
+For tmux (default):
   - Ctrl+B d    Detach from session (keeps agent running)
   - Ctrl+B n    Next session (if multiple agents)
   - Ctrl+B p    Previous session
   - Ctrl+B s    List all sessions
 
+For Zellij (when multiplexer=zellij):
+  - Ctrl+O d    Detach from session
+  - Alt+n/p     Next/previous pane
+
 If no agent-id is specified, attaches to the first available agent.
 
-Use --all to view multiple agents in a tiled tmux layout (up to 6 agents, 3 per row).`,
+Use --all to view multiple agents in a tiled layout (up to 6 agents, tmux only).`,
 	RunE: runAgentWatch,
 }
 
@@ -40,9 +46,14 @@ func init() {
 }
 
 func runAgentWatch(cmd *cobra.Command, args []string) error {
-	// Check if tmux is available
-	if _, err := exec.LookPath("tmux"); err != nil {
-		return fmt.Errorf("tmux not found in PATH - required for agent watch")
+	// Detect multiplexer type from config
+	muxType := daemon.MultiplexerType(getMultiplexer())
+
+	// Check if the multiplexer is available
+	muxBinary := string(muxType)
+	muxPath, err := exec.LookPath(muxBinary)
+	if err != nil {
+		return fmt.Errorf("%s not found in PATH - required for agent watch", muxBinary)
 	}
 
 	c, err := client.New(getSocketPath())
@@ -64,8 +75,11 @@ func runAgentWatch(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no spawned agents found - create one with 'map agent create'")
 	}
 
-	// Handle --all flag for tiled view
+	// Handle --all flag for tiled view (tmux only for now)
 	if watchAllFlag {
+		if muxType != daemon.MultiplexerTmux {
+			return fmt.Errorf("--all flag is only supported with tmux multiplexer")
+		}
 		return runAgentWatchAll(agents)
 	}
 
@@ -79,7 +93,7 @@ func runAgentWatch(cmd *cobra.Command, args []string) error {
 		for _, a := range agents {
 			if a.GetAgentId() == targetID || strings.HasPrefix(a.GetAgentId(), targetID) {
 				targetAgent = a.GetAgentId()
-				targetSession = a.GetLogFile() // LogFile field repurposed to hold tmux session name
+				targetSession = a.GetLogFile() // LogFile field repurposed to hold session name
 				break
 			}
 		}
@@ -92,17 +106,19 @@ func runAgentWatch(cmd *cobra.Command, args []string) error {
 		targetSession = agents[0].GetLogFile()
 	}
 
-	// Verify tmux session exists
-	checkCmd := exec.Command("tmux", "has-session", "-t", targetSession)
-	if err := checkCmd.Run(); err != nil {
-		return fmt.Errorf("tmux session %s not found - agent may have crashed", targetSession)
+	// Create multiplexer instance for session operations
+	mux, err := daemon.NewMultiplexer(muxType)
+	if err != nil {
+		return fmt.Errorf("init multiplexer: %w", err)
 	}
 
-	// Enable mouse mode for scrolling
-	_ = exec.Command("tmux", "set-option", "-t", targetSession, "mouse", "on").Run()
+	// Verify session exists
+	if !mux.HasSession(targetSession) {
+		return fmt.Errorf("%s session %s not found - agent may have crashed", muxType, targetSession)
+	}
 
-	// Check if the pane is dead (claude exited but session preserved)
-	if isPaneDead(targetSession) {
+	// For tmux, check if the pane is dead (claude exited but session preserved)
+	if muxType == daemon.MultiplexerTmux && mux.IsPaneDead(targetSession) {
 		fmt.Printf("Agent %s pane is dead (claude exited).\n", targetAgent)
 		fmt.Print("Respawn claude? [Y/n] ")
 
@@ -125,23 +141,25 @@ func runAgentWatch(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Printf("Attaching to agent %s (tmux session: %s)\n", targetAgent, targetSession)
+	fmt.Printf("Attaching to agent %s (%s session: %s)\n", targetAgent, muxType, targetSession)
 	fmt.Println()
-	fmt.Println("  Ctrl+B d     Detach (keeps agent running)")
-	fmt.Println("  Ctrl+C       Interrupts claude (session preserved)")
-	fmt.Println("  Ctrl+B n/p   Switch agents")
-	fmt.Println()
-
-	// Attach to the tmux session
-	// We need to use syscall.Exec to replace the current process
-	// so that tmux can properly take over the terminal
-	tmuxPath, err := exec.LookPath("tmux")
-	if err != nil {
-		return err
+	if muxType == daemon.MultiplexerTmux {
+		fmt.Println("  Ctrl+B d     Detach (keeps agent running)")
+		fmt.Println("  Ctrl+C       Interrupts claude (session preserved)")
+		fmt.Println("  Ctrl+B n/p   Switch agents")
+	} else {
+		fmt.Println("  Ctrl+O d     Detach (keeps agent running)")
+		fmt.Println("  Ctrl+C       Interrupts claude")
+		fmt.Println("  Alt+n/p      Navigate panes")
 	}
+	fmt.Println()
 
-	// Use exec.Command but connect stdin/stdout/stderr
-	attachCmd := exec.Command(tmuxPath, "attach", "-t", targetSession)
+	// Attach to the session using the multiplexer's attach command
+	attachCmd := mux.AttachCommand(targetSession)
+	if attachCmd == nil {
+		// Fallback to direct command
+		attachCmd = exec.Command(muxPath, "attach", "-t", targetSession)
+	}
 	attachCmd.Stdin = os.Stdin
 	attachCmd.Stdout = os.Stdout
 	attachCmd.Stderr = os.Stderr
@@ -240,14 +258,4 @@ func runAgentWatchAll(agents []*mapv1.SpawnedAgentInfo) error {
 	attachCmd.Stderr = os.Stderr
 
 	return attachCmd.Run()
-}
-
-// isPaneDead checks if a tmux pane's process has exited
-func isPaneDead(sessionName string) bool {
-	cmd := exec.Command("tmux", "display-message", "-t", sessionName, "-p", "#{pane_dead}")
-	output, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	return strings.TrimSpace(string(output)) == "1"
 }

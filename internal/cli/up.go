@@ -20,8 +20,15 @@ var (
 var upCmd = &cobra.Command{
 	Use:   "up",
 	Short: "Start the mapd daemon",
-	Long:  `Start the mapd daemon process. By default runs in the background.`,
-	RunE:  runUp,
+	Long: `Start the mapd daemon process. By default runs in the background.
+
+The terminal multiplexer can be configured via:
+  - 'multiplexer' in ~/.mapd/config.yaml
+  - MAP_MULTIPLEXER environment variable
+  - defaults to 'tmux' if not specified
+
+Supported multiplexers: tmux, zellij`,
+	RunE: runUp,
 }
 
 func init() {
@@ -46,8 +53,9 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 func runForeground() error {
 	cfg := &daemon.Config{
-		SocketPath: getSocketPath(),
-		DataDir:    dataDir,
+		SocketPath:  getSocketPath(),
+		DataDir:     dataDir,
+		Multiplexer: getMultiplexer(),
 	}
 
 	srv, err := daemon.NewServer(cfg)

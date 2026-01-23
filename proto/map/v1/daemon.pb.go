@@ -554,8 +554,10 @@ type GetStatusResponse struct {
 	ConnectedAgents int32                  `protobuf:"varint,3,opt,name=connected_agents,json=connectedAgents,proto3" json:"connected_agents,omitempty"`
 	PendingTasks    int32                  `protobuf:"varint,4,opt,name=pending_tasks,json=pendingTasks,proto3" json:"pending_tasks,omitempty"`
 	ActiveTasks     int32                  `protobuf:"varint,5,opt,name=active_tasks,json=activeTasks,proto3" json:"active_tasks,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Terminal multiplexer being used: "tmux" or "zellij"
+	Multiplexer   string `protobuf:"bytes,6,opt,name=multiplexer,proto3" json:"multiplexer,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetStatusResponse) Reset() {
@@ -621,6 +623,13 @@ func (x *GetStatusResponse) GetActiveTasks() int32 {
 		return x.ActiveTasks
 	}
 	return 0
+}
+
+func (x *GetStatusResponse) GetMultiplexer() string {
+	if x != nil {
+		return x.Multiplexer
+	}
+	return ""
 }
 
 // WatchEventsRequest configures event streaming
@@ -845,7 +854,9 @@ type SpawnedAgentInfo struct {
 	CreatedAt    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	LogFile      string                 `protobuf:"bytes,6,opt,name=log_file,json=logFile,proto3" json:"log_file,omitempty"`
 	// Agent type: "claude" or "codex"
-	AgentType     string `protobuf:"bytes,7,opt,name=agent_type,json=agentType,proto3" json:"agent_type,omitempty"`
+	AgentType string `protobuf:"bytes,7,opt,name=agent_type,json=agentType,proto3" json:"agent_type,omitempty"`
+	// Terminal multiplexer type: "tmux" or "zellij"
+	Multiplexer   string `protobuf:"bytes,8,opt,name=multiplexer,proto3" json:"multiplexer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -925,6 +936,13 @@ func (x *SpawnedAgentInfo) GetLogFile() string {
 func (x *SpawnedAgentInfo) GetAgentType() string {
 	if x != nil {
 		return x.AgentType
+	}
+	return ""
+}
+
+func (x *SpawnedAgentInfo) GetMultiplexer() string {
+	if x != nil {
+		return x.Multiplexer
 	}
 	return ""
 }
@@ -1505,14 +1523,15 @@ const file_map_v1_daemon_proto_rawDesc = "" +
 	"\x05force\x18\x01 \x01(\bR\x05force\",\n" +
 	"\x10ShutdownResponse\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\"\x12\n" +
-	"\x10GetStatusRequest\"\xdb\x01\n" +
+	"\x10GetStatusRequest\"\xfd\x01\n" +
 	"\x11GetStatusResponse\x12\x18\n" +
 	"\arunning\x18\x01 \x01(\bR\arunning\x129\n" +
 	"\n" +
 	"started_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12)\n" +
 	"\x10connected_agents\x18\x03 \x01(\x05R\x0fconnectedAgents\x12#\n" +
 	"\rpending_tasks\x18\x04 \x01(\x05R\fpendingTasks\x12!\n" +
-	"\factive_tasks\x18\x05 \x01(\x05R\vactiveTasks\"\x8c\x01\n" +
+	"\factive_tasks\x18\x05 \x01(\x05R\vactiveTasks\x12 \n" +
+	"\vmultiplexer\x18\x06 \x01(\tR\vmultiplexer\"\x8c\x01\n" +
 	"\x12WatchEventsRequest\x122\n" +
 	"\vtype_filter\x18\x01 \x03(\x0e2\x11.map.v1.EventTypeR\n" +
 	"typeFilter\x12!\n" +
@@ -1530,7 +1549,7 @@ const file_map_v1_daemon_proto_rawDesc = "" +
 	"agent_type\x18\x06 \x01(\tR\tagentType\x12)\n" +
 	"\x10skip_permissions\x18\a \x01(\bR\x0fskipPermissions\"F\n" +
 	"\x12SpawnAgentResponse\x120\n" +
-	"\x06agents\x18\x01 \x03(\v2\x18.map.v1.SpawnedAgentInfoR\x06agents\"\xf1\x01\n" +
+	"\x06agents\x18\x01 \x03(\v2\x18.map.v1.SpawnedAgentInfoR\x06agents\"\x93\x02\n" +
 	"\x10SpawnedAgentInfo\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12#\n" +
 	"\rworktree_path\x18\x02 \x01(\tR\fworktreePath\x12\x10\n" +
@@ -1540,7 +1559,8 @@ const file_map_v1_daemon_proto_rawDesc = "" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x19\n" +
 	"\blog_file\x18\x06 \x01(\tR\alogFile\x12\x1d\n" +
 	"\n" +
-	"agent_type\x18\a \x01(\tR\tagentType\"C\n" +
+	"agent_type\x18\a \x01(\tR\tagentType\x12 \n" +
+	"\vmultiplexer\x18\b \x01(\tR\vmultiplexer\"C\n" +
 	"\x10KillAgentRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x14\n" +
 	"\x05force\x18\x02 \x01(\bR\x05force\"G\n" +
