@@ -26,7 +26,7 @@ func init() {
 }
 
 func runWatch(cmd *cobra.Command, args []string) error {
-	c, err := client.New(socketPath)
+	c, err := client.New(getSocketPath())
 	if err != nil {
 		return fmt.Errorf("connect to daemon: %w", err)
 	}

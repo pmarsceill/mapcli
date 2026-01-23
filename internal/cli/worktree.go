@@ -44,7 +44,7 @@ func init() {
 }
 
 func runWorktreeLs(cmd *cobra.Command, args []string) error {
-	c, err := client.New(socketPath)
+	c, err := client.New(getSocketPath())
 	if err != nil {
 		return fmt.Errorf("connect to daemon: %w", err)
 	}
@@ -85,7 +85,7 @@ func runWorktreeCleanup(cmd *cobra.Command, args []string) error {
 	agentID, _ := cmd.Flags().GetString("agent")
 	all, _ := cmd.Flags().GetBool("all")
 
-	c, err := client.New(socketPath)
+	c, err := client.New(getSocketPath())
 	if err != nil {
 		return fmt.Errorf("connect to daemon: %w", err)
 	}

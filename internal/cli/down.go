@@ -24,12 +24,12 @@ func init() {
 }
 
 func runDown(cmd *cobra.Command, args []string) error {
-	if !client.IsDaemonRunning(socketPath) {
+	if !client.IsDaemonRunning(getSocketPath()) {
 		fmt.Println("daemon is not running")
 		return nil
 	}
 
-	c, err := client.New(socketPath)
+	c, err := client.New(getSocketPath())
 	if err != nil {
 		return fmt.Errorf("connect to daemon: %w", err)
 	}
