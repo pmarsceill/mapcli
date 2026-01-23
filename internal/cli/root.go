@@ -32,6 +32,12 @@ func getSocketPath() string {
 	return viper.GetString("socket")
 }
 
+// getMultiplexer returns the multiplexer type from Viper (env > config > default)
+// Returns "tmux" or "zellij"
+func getMultiplexer() string {
+	return viper.GetString("multiplexer")
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringP("socket", "s", "/tmp/mapd.sock", "daemon socket path")
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: ~/.mapd/config.yaml)")

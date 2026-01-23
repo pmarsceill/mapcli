@@ -14,7 +14,7 @@ import (
 var cleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Clean up orphaned processes and resources",
-	Long: `Clean up orphaned mapd processes, tmux sessions, and socket files.
+	Long: `Clean up orphaned mapd processes, multiplexer sessions (tmux/zellij), and socket files.
 
 This is useful when the daemon didn't shut down cleanly and left behind
 stale processes or socket files that prevent starting a new daemon.`,
@@ -38,13 +38,13 @@ func runClean(cmd *cobra.Command, args []string) error {
 		cleaned = true
 	}
 
-	// 2. Kill orphaned tmux sessions
-	killedSessions, err := killOrphanedTmuxSessions()
+	// 2. Kill orphaned multiplexer sessions (both tmux and zellij)
+	killedSessions, err := killOrphanedSessions()
 	if err != nil {
-		fmt.Printf("warning: error killing tmux sessions: %v\n", err)
+		fmt.Printf("warning: error killing sessions: %v\n", err)
 	}
 	if killedSessions > 0 {
-		fmt.Printf("killed %d orphaned tmux session(s)\n", killedSessions)
+		fmt.Printf("killed %d orphaned multiplexer session(s)\n", killedSessions)
 		cleaned = true
 	}
 
@@ -106,16 +106,29 @@ func killOrphanedProcesses() (int, error) {
 	return killed, nil
 }
 
-// killOrphanedTmuxSessions kills map-agent-* tmux sessions
-func killOrphanedTmuxSessions() (int, error) {
-	sessions, err := daemon.ListTmuxSessions()
+// killOrphanedSessions kills map-agent-* sessions for both tmux and zellij
+func killOrphanedSessions() (int, error) {
+	var killed int
+
+	// Kill orphaned tmux sessions
+	tmuxSessions, err := daemon.ListTmuxSessions()
 	if err != nil {
-		return 0, err
+		return killed, err
+	}
+	for _, session := range tmuxSessions {
+		cmd := exec.Command("tmux", "kill-session", "-t", session)
+		if err := cmd.Run(); err == nil {
+			killed++
+		}
 	}
 
-	var killed int
-	for _, session := range sessions {
-		cmd := exec.Command("tmux", "kill-session", "-t", session)
+	// Kill orphaned zellij sessions
+	zellijSessions, err := daemon.ListZellijSessions()
+	if err != nil {
+		return killed, err
+	}
+	for _, session := range zellijSessions {
+		cmd := exec.Command("zellij", "kill-session", session)
 		if err := cmd.Run(); err == nil {
 			killed++
 		}

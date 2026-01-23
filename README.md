@@ -29,11 +29,14 @@ MAP requires the following tools to be installed and available in your PATH:
 | Dependency | Required For | Version |
 |------------|--------------|---------|
 | **git** | Worktree isolation | 2.15+ (worktree support) |
-| **tmux** | Agent session management | Any recent version |
+| **tmux** | Agent session management (default) | Any recent version |
+| **zellij** | Agent session management (alternative) | Any recent version |
 | **claude** | Claude Code agents | Latest (optional if only using Codex) |
 | **codex** | OpenAI Codex agents | Latest (optional if only using Claude) |
 
 At least one of `claude` or `codex` must be installed depending on which agent type you want to use.
+
+**Terminal Multiplexer:** MAP supports both tmux (default) and Zellij for managing agent sessions. Only one is required. See [Multiplexer Configuration](#multiplexer-configuration) for details.
 
 **Installing Dependencies:**
 
@@ -158,7 +161,7 @@ This creates two binaries in `bin/`:
 |---------|-------------|
 | `map up [-f]` | Start the daemon (foreground with -f) |
 | `map down [-f]` | Stop the daemon (force immediate shutdown with -f) |
-| `map clean` | Clean up orphaned processes, tmux sessions, and socket files |
+| `map clean` | Clean up orphaned processes, multiplexer sessions, and socket files |
 | `map watch` | Stream real-time events from the daemon |
 | `map config list` | List all configuration values |
 | `map config get <key>` | Get a configuration value |
@@ -173,8 +176,8 @@ This creates two binaries in `bin/`:
 | `map agent list` | List spawned agents (alias: `ls`, same as `map agents`) |
 | `map agent kill <id>` | Terminate a spawned agent |
 | `map agent kill --all` | Terminate all spawned agents |
-| `map agent watch [id]` | Attach to agent's tmux session |
-| `map agent watch -a` | Watch all agents in tiled tmux view |
+| `map agent watch [id]` | Attach to agent's terminal session |
+| `map agent watch -a` | Watch all agents in tiled view (tmux only) |
 | `map agent respawn <id>` | Restart agent in dead tmux pane |
 | `map agent merge <id>` | Merge agent's worktree changes into current branch |
 | `map agent merge <id> -k` | Merge agent's changes and kill the agent |
@@ -421,7 +424,7 @@ Events include task lifecycle changes (created, offered, accepted, started, comp
               ▼                                              ▼
     ┌───────────────────┐                      ┌─────────────────────┐
     │ ~/.mapd/worktrees │                      │ claude/codex CLI    │
-    │   claude-abc123/  │◄─────── cwd ─────────│   (tmux session)    │
+    │   claude-abc123/  │◄─────── cwd ─────────│ (tmux/zellij session)│
     │   codex-def456/   │                      └─────────────────────┘
     └───────────────────┘
 ```
@@ -466,6 +469,7 @@ MAP supports persistent configuration via a YAML file at `~/.mapd/config.yaml`. 
 # ~/.mapd/config.yaml
 socket: /tmp/mapd.sock
 data-dir: ~/.mapd
+multiplexer: tmux             # tmux or zellij
 
 agent:
   default-type: claude        # claude or codex
@@ -481,11 +485,35 @@ agent:
 |-----|---------|-------------|
 | `socket` | `/tmp/mapd.sock` | Unix socket path for daemon communication |
 | `data-dir` | `~/.mapd` | Data directory for SQLite and worktrees |
+| `multiplexer` | `tmux` | Terminal multiplexer for agent sessions (`tmux` or `zellij`) |
 | `agent.default-type` | `claude` | Default agent type (`claude` or `codex`) |
 | `agent.default-count` | `1` | Default number of agents to spawn |
 | `agent.default-branch` | `""` | Default git branch for worktrees (empty = current branch) |
 | `agent.use-worktree` | `true` | Use worktree isolation by default |
 | `agent.skip-permissions` | `true` | Skip permission prompts by default |
+
+### Multiplexer Configuration
+
+MAP supports both **tmux** (default) and **Zellij** as terminal multiplexers for managing agent sessions. You can switch between them via:
+
+```bash
+# Set via config command
+map config set multiplexer zellij
+
+# Or via environment variable
+export MAP_MULTIPLEXER=zellij
+map up
+```
+
+**Keyboard shortcuts by multiplexer:**
+
+| Action | tmux | Zellij |
+|--------|------|--------|
+| Detach from session | `Ctrl+B d` | `Ctrl+O d` |
+| Navigate panes | `Ctrl+B arrow` | `Alt+arrow` |
+| Next/prev pane | `Ctrl+B n/p` | `Alt+n/p` |
+
+**Note:** The `--all` flag for `map agent watch` (tiled multi-agent view) is currently only supported with tmux.
 
 ### Environment Variables
 
@@ -493,6 +521,7 @@ All configuration options can be set via environment variables with the `MAP_` p
 
 ```bash
 export MAP_SOCKET=/custom/path.sock
+export MAP_MULTIPLEXER=zellij
 export MAP_AGENT_DEFAULT_TYPE=codex
 export MAP_AGENT_DEFAULT_COUNT=3
 ```

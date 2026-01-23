@@ -102,6 +102,8 @@ message GetStatusResponse {
   int32 connected_agents = 3;
   int32 pending_tasks = 4;
   int32 active_tasks = 5;
+  // Terminal multiplexer being used: "tmux" or "zellij"
+  string multiplexer = 6;
 }
 
 // WatchEventsRequest configures event streaming
@@ -152,6 +154,8 @@ message SpawnedAgentInfo {
   string log_file = 6;
   // Agent type: "claude" or "codex"
   string agent_type = 7;
+  // Terminal multiplexer type: "tmux" or "zellij"
+  string multiplexer = 8;
 }
 
 // KillAgentRequest requests termination of a spawned agent

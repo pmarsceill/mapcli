@@ -67,6 +67,7 @@ func initConfig() error {
 	// Set defaults
 	viper.SetDefault("socket", "/tmp/mapd.sock")
 	viper.SetDefault("data-dir", filepath.Join(os.Getenv("HOME"), ".mapd"))
+	viper.SetDefault("multiplexer", "tmux") // terminal multiplexer: "tmux" or "zellij"
 	viper.SetDefault("agent.default-type", "claude")
 	viper.SetDefault("agent.default-count", 1)
 	viper.SetDefault("agent.default-branch", "")
