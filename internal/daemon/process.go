@@ -233,7 +233,7 @@ func (m *ProcessManager) ExecuteTask(ctx context.Context, agentID string, taskID
 
 	// Wait for the pasted text to be processed by the terminal
 	// Long text may show as "[Pasted text #1 +N lines]" and need confirmation
-	time.Sleep(300 * time.Millisecond)
+	time.Sleep(tmuxPasteDelay)
 
 	// Send Enter key to confirm/submit the prompt
 	// For long pastes, this confirms the paste; for short text, this submits
@@ -477,7 +477,7 @@ func (m *ProcessManager) Spawn(agentID, workdir, prompt, agentType string, skipP
 			log.Printf("warning: failed to send initial prompt text to %s: %v", agentID, err)
 		} else {
 			// Wait for pasted text to be processed (long text shows as collapsed paste)
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(tmuxPasteDelay)
 
 			// Send Enter to confirm/submit
 			cmd = exec.Command("tmux", "send-keys", "-t", slot.TmuxSession, "Enter")

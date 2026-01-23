@@ -100,9 +100,19 @@ func (m *InputMonitor) checkAllAgents() {
 
 	// Get all agents
 	agents := m.processes.List()
+	activeIDs := make(map[string]bool)
 
 	for _, agent := range agents {
+		activeIDs[agent.AgentID] = true
 		m.checkAgent(agent)
+	}
+
+	// Clean up stale entries for agents that no longer exist
+	for id := range m.lastContent {
+		if !activeIDs[id] {
+			delete(m.lastContent, id)
+			delete(m.lastChangeTime, id)
+		}
 	}
 }
 

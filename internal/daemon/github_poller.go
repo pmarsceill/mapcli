@@ -26,12 +26,17 @@ type GitHubPoller struct {
 	interval time.Duration
 }
 
+// ghCommentAuthor represents the author of a GitHub comment
+type ghCommentAuthor struct {
+	Login string `json:"login"`
+}
+
 // ghComment represents a GitHub issue comment
 type ghComment struct {
-	ID        int    `json:"id"`
-	Body      string `json:"body"`
-	Author    string `json:"author"`
-	CreatedAt string `json:"createdAt"`
+	ID        int             `json:"id"`
+	Body      string          `json:"body"`
+	Author    ghCommentAuthor `json:"author"`
+	CreatedAt string          `json:"createdAt"`
 }
 
 // ghIssueComments is the response from gh issue view --json comments
@@ -41,6 +46,10 @@ type ghIssueComments struct {
 
 // inputRequestPrefix is the prefix we use when posting questions to GitHub
 const inputRequestPrefix = "**My agent needs more input:**"
+
+// tmuxPasteDelay is the delay after sending text to tmux before sending Enter
+// This allows long pastes to be processed before submission
+const tmuxPasteDelay = 300 * time.Millisecond
 
 // NewGitHubPoller creates a new GitHub poller
 func NewGitHubPoller(store *Store, processes *ProcessManager, eventCh chan *mapv1.Event) *GitHubPoller {
@@ -144,7 +153,7 @@ func (p *GitHubPoller) checkTaskForResponse(task *TaskRecord) {
 	}
 
 	log.Printf("github poller: found new comment on %s/%s#%d from %s",
-		task.GitHubOwner, task.GitHubRepo, task.GitHubIssueNumber, newComment.Author)
+		task.GitHubOwner, task.GitHubRepo, task.GitHubIssueNumber, newComment.Author.Login)
 
 	// Deliver response to agent's tmux session
 	if err := p.deliverResponseToAgent(task, newComment.Body); err != nil {
@@ -211,7 +220,7 @@ func (p *GitHubPoller) deliverResponseToAgent(task *TaskRecord, response string)
 	}
 
 	// Wait for pasted text to be processed (long text shows as collapsed paste)
-	time.Sleep(300 * time.Millisecond)
+	time.Sleep(tmuxPasteDelay)
 
 	// Send Enter to confirm/submit
 	cmd = exec.Command("tmux", "send-keys", "-t", tmuxSession, "Enter")
