@@ -5,12 +5,11 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // Version is set via -ldflags at build time
 var Version = "dev"
-
-var socketPath string
 
 // rootCmd is the base command
 var rootCmd = &cobra.Command{
@@ -28,6 +27,16 @@ func Execute() {
 	}
 }
 
+// getSocketPath returns the socket path from Viper (flag > env > config > default)
+func getSocketPath() string {
+	return viper.GetString("socket")
+}
+
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&socketPath, "socket", "s", "/tmp/mapd.sock", "daemon socket path")
+	rootCmd.PersistentFlags().StringP("socket", "s", "/tmp/mapd.sock", "daemon socket path")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: ~/.mapd/config.yaml)")
+
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		return initConfig()
+	}
 }
