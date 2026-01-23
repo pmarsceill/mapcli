@@ -160,6 +160,9 @@ This creates two binaries in `bin/`:
 | `map down [-f]` | Stop the daemon (force immediate shutdown with -f) |
 | `map clean` | Clean up orphaned processes, tmux sessions, and socket files |
 | `map watch` | Stream real-time events from the daemon |
+| `map config list` | List all configuration values |
+| `map config get <key>` | Get a configuration value |
+| `map config set <key> <value>` | Set a configuration value |
 
 ### Agent Management
 
@@ -442,11 +445,64 @@ mapcli/
 
 ## Configuration
 
+MAP supports persistent configuration via a YAML file at `~/.mapd/config.yaml`. Configuration values can be set via:
+
+1. **CLI flags** (highest priority)
+2. **Environment variables** (with `MAP_` prefix)
+3. **Config file** (`~/.mapd/config.yaml`)
+4. **Defaults** (lowest priority)
+
+### Config Commands
+
+| Command | Description |
+|---------|-------------|
+| `map config list` | List all configuration values (alias: `ls`) |
+| `map config get <key>` | Get a specific configuration value |
+| `map config set <key> <value>` | Set and persist a configuration value |
+
+### Configuration File
+
+```yaml
+# ~/.mapd/config.yaml
+socket: /tmp/mapd.sock
+data-dir: ~/.mapd
+
+agent:
+  default-type: claude        # claude or codex
+  default-count: 1            # number of agents to spawn
+  default-branch: ""          # git branch for worktrees
+  use-worktree: true          # worktree isolation
+  skip-permissions: true      # skip permission prompts
+```
+
+### Configuration Options
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `socket` | `/tmp/mapd.sock` | Unix socket path for daemon communication |
+| `data-dir` | `~/.mapd` | Data directory for SQLite and worktrees |
+| `agent.default-type` | `claude` | Default agent type (`claude` or `codex`) |
+| `agent.default-count` | `1` | Default number of agents to spawn |
+| `agent.default-branch` | `""` | Default git branch for worktrees (empty = current branch) |
+| `agent.use-worktree` | `true` | Use worktree isolation by default |
+| `agent.skip-permissions` | `true` | Skip permission prompts by default |
+
+### Environment Variables
+
+All configuration options can be set via environment variables with the `MAP_` prefix. Nested keys use underscores:
+
+```bash
+export MAP_SOCKET=/custom/path.sock
+export MAP_AGENT_DEFAULT_TYPE=codex
+export MAP_AGENT_DEFAULT_COUNT=3
+```
+
 ### Global CLI Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-s, --socket` | `/tmp/mapd.sock` | Unix socket path for daemon communication |
+| `--config` | `~/.mapd/config.yaml` | Path to config file |
 
 ### Daemon (`map up`)
 
@@ -515,6 +571,7 @@ Core runtime dependencies:
 | Package | Purpose |
 |---------|---------|
 | `github.com/spf13/cobra` | CLI framework |
+| `github.com/spf13/viper` | Configuration management |
 | `google.golang.org/grpc` | gRPC communication |
 | `google.golang.org/protobuf` | Protocol buffer support |
 | `modernc.org/sqlite` | SQLite database (pure Go) |
