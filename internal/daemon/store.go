@@ -27,6 +27,15 @@ type TaskRecord struct {
 	Error       string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	// GitHub issue tracking
+	GitHubOwner          string
+	GitHubRepo           string
+	GitHubIssueNumber    int
+	LastCommentID        string
+	WaitingInputQuestion string
+	WaitingInputSince    time.Time
+	// Repository root this task belongs to
+	RepoRoot string
 }
 
 // EventRecord represents an event in the database
@@ -47,6 +56,8 @@ type SpawnedAgentRecord struct {
 	Status       string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+	// Repository root the agent was spawned from
+	RepoRoot string
 }
 
 const schema = `
@@ -59,11 +70,19 @@ CREATE TABLE IF NOT EXISTS tasks (
 	result TEXT,
 	error TEXT,
 	created_at INTEGER NOT NULL,
-	updated_at INTEGER NOT NULL
+	updated_at INTEGER NOT NULL,
+	github_owner TEXT,
+	github_repo TEXT,
+	github_issue_number INTEGER,
+	last_comment_id TEXT,
+	waiting_input_question TEXT,
+	waiting_input_since INTEGER,
+	repo_root TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);
+-- Note: idx_tasks_github is created in migrate() to support existing databases
 
 CREATE TABLE IF NOT EXISTS events (
 	event_id TEXT PRIMARY KEY,
@@ -83,7 +102,8 @@ CREATE TABLE IF NOT EXISTS spawned_agents (
 	prompt TEXT,
 	status TEXT DEFAULT 'running',
 	created_at INTEGER NOT NULL,
-	updated_at INTEGER NOT NULL
+	updated_at INTEGER NOT NULL,
+	repo_root TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_spawned_agents_status ON spawned_agents(status);
@@ -113,12 +133,45 @@ func NewStore(dataDir string) (*Store, error) {
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
 
-	return &Store{db: db}, nil
+	// Run migrations for existing databases
+	store := &Store{db: db}
+	if err := store.migrate(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+
+	return store, nil
 }
 
 // Close closes the database connection
 func (s *Store) Close() error {
 	return s.db.Close()
+}
+
+// migrate adds new columns to existing databases
+func (s *Store) migrate() error {
+	migrations := []string{
+		"ALTER TABLE tasks ADD COLUMN github_owner TEXT",
+		"ALTER TABLE tasks ADD COLUMN github_repo TEXT",
+		"ALTER TABLE tasks ADD COLUMN github_issue_number INTEGER",
+		"ALTER TABLE tasks ADD COLUMN last_comment_id TEXT",
+		"ALTER TABLE tasks ADD COLUMN waiting_input_question TEXT",
+		"ALTER TABLE tasks ADD COLUMN waiting_input_since INTEGER",
+		"ALTER TABLE tasks ADD COLUMN repo_root TEXT",
+		"ALTER TABLE spawned_agents ADD COLUMN repo_root TEXT",
+	}
+
+	for _, m := range migrations {
+		// Ignore errors - column may already exist
+		_, _ = s.db.Exec(m)
+	}
+
+	// Ensure indexes exist
+	_, _ = s.db.Exec("CREATE INDEX IF NOT EXISTS idx_tasks_github ON tasks(github_owner, github_repo, github_issue_number)")
+	_, _ = s.db.Exec("CREATE INDEX IF NOT EXISTS idx_tasks_repo_root ON tasks(repo_root)")
+	_, _ = s.db.Exec("CREATE INDEX IF NOT EXISTS idx_spawned_agents_repo_root ON spawned_agents(repo_root)")
+
+	return nil
 }
 
 // --- Task Operations ---
@@ -130,11 +183,19 @@ func (s *Store) CreateTask(task *TaskRecord) error {
 		return fmt.Errorf("marshal scope paths: %w", err)
 	}
 
+	var waitingInputSince int64
+	if !task.WaitingInputSince.IsZero() {
+		waitingInputSince = task.WaitingInputSince.Unix()
+	}
+
 	_, err = s.db.Exec(`
-		INSERT INTO tasks (task_id, description, scope_paths, status, assigned_to, result, error, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO tasks (task_id, description, scope_paths, status, assigned_to, result, error, created_at, updated_at,
+			github_owner, github_repo, github_issue_number, last_comment_id, waiting_input_question, waiting_input_since, repo_root)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, task.TaskID, task.Description, string(paths), task.Status, task.AssignedTo,
-		task.Result, task.Error, task.CreatedAt.Unix(), task.UpdatedAt.Unix())
+		task.Result, task.Error, task.CreatedAt.Unix(), task.UpdatedAt.Unix(),
+		task.GitHubOwner, task.GitHubRepo, task.GitHubIssueNumber, task.LastCommentID,
+		task.WaitingInputQuestion, waitingInputSince, task.RepoRoot)
 
 	return err
 }
@@ -142,7 +203,8 @@ func (s *Store) CreateTask(task *TaskRecord) error {
 // GetTask retrieves a task by ID
 func (s *Store) GetTask(taskID string) (*TaskRecord, error) {
 	row := s.db.QueryRow(`
-		SELECT task_id, description, scope_paths, status, assigned_to, result, error, created_at, updated_at
+		SELECT task_id, description, scope_paths, status, assigned_to, result, error, created_at, updated_at,
+			github_owner, github_repo, github_issue_number, last_comment_id, waiting_input_question, waiting_input_since, repo_root
 		FROM tasks WHERE task_id = ?
 	`, taskID)
 
@@ -150,9 +212,11 @@ func (s *Store) GetTask(taskID string) (*TaskRecord, error) {
 }
 
 // ListTasks retrieves tasks with optional filters
-func (s *Store) ListTasks(statusFilter, agentFilter string, limit int) ([]*TaskRecord, error) {
-	query := `SELECT task_id, description, scope_paths, status, assigned_to, result, error, created_at, updated_at FROM tasks WHERE 1=1`
-	args := []interface{}{}
+func (s *Store) ListTasks(statusFilter, agentFilter, repoRoot string, limit int) ([]*TaskRecord, error) {
+	query := `SELECT task_id, description, scope_paths, status, assigned_to, result, error, created_at, updated_at,
+		github_owner, github_repo, github_issue_number, last_comment_id, waiting_input_question, waiting_input_since, repo_root
+		FROM tasks WHERE 1=1`
+	args := []any{}
 
 	if statusFilter != "" {
 		query += " AND status = ?"
@@ -161,6 +225,10 @@ func (s *Store) ListTasks(statusFilter, agentFilter string, limit int) ([]*TaskR
 	if agentFilter != "" {
 		query += " AND assigned_to = ?"
 		args = append(args, agentFilter)
+	}
+	if repoRoot != "" {
+		query += " AND repo_root = ?"
+		args = append(args, repoRoot)
 	}
 
 	query += " ORDER BY created_at DESC"
@@ -195,12 +263,21 @@ func (s *Store) UpdateTask(task *TaskRecord) error {
 		return fmt.Errorf("marshal scope paths: %w", err)
 	}
 
+	var waitingInputSince int64
+	if !task.WaitingInputSince.IsZero() {
+		waitingInputSince = task.WaitingInputSince.Unix()
+	}
+
 	_, err = s.db.Exec(`
 		UPDATE tasks SET description = ?, scope_paths = ?, status = ?, assigned_to = ?,
-			result = ?, error = ?, updated_at = ?
+			result = ?, error = ?, updated_at = ?,
+			github_owner = ?, github_repo = ?, github_issue_number = ?, last_comment_id = ?,
+			waiting_input_question = ?, waiting_input_since = ?, repo_root = ?
 		WHERE task_id = ?
 	`, task.Description, string(paths), task.Status, task.AssignedTo,
-		task.Result, task.Error, task.UpdatedAt.Unix(), task.TaskID)
+		task.Result, task.Error, task.UpdatedAt.Unix(),
+		task.GitHubOwner, task.GitHubRepo, task.GitHubIssueNumber, task.LastCommentID,
+		task.WaitingInputQuestion, waitingInputSince, task.RepoRoot, task.TaskID)
 
 	return err
 }
@@ -221,14 +298,110 @@ func (s *Store) AssignTask(taskID, instanceID string) error {
 	return err
 }
 
+// ListTasksWaitingInput returns tasks with status=waiting_input that have GitHub sources
+func (s *Store) ListTasksWaitingInput() ([]*TaskRecord, error) {
+	rows, err := s.db.Query(`
+		SELECT task_id, description, scope_paths, status, assigned_to, result, error, created_at, updated_at,
+			github_owner, github_repo, github_issue_number, last_comment_id, waiting_input_question, waiting_input_since, repo_root
+		FROM tasks
+		WHERE status = 'waiting_input' AND github_owner != '' AND github_repo != '' AND github_issue_number > 0
+		ORDER BY waiting_input_since ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var tasks []*TaskRecord
+	for rows.Next() {
+		task, err := s.scanTaskRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+	return tasks, rows.Err()
+}
+
+// ListTasksInProgressWithGitHub returns tasks with status=in_progress that have GitHub sources
+func (s *Store) ListTasksInProgressWithGitHub() ([]*TaskRecord, error) {
+	rows, err := s.db.Query(`
+		SELECT task_id, description, scope_paths, status, assigned_to, result, error, created_at, updated_at,
+			github_owner, github_repo, github_issue_number, last_comment_id, waiting_input_question, waiting_input_since, repo_root
+		FROM tasks
+		WHERE status = 'in_progress' AND github_owner != '' AND github_repo != '' AND github_issue_number > 0
+		ORDER BY updated_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var tasks []*TaskRecord
+	for rows.Next() {
+		task, err := s.scanTaskRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+	return tasks, rows.Err()
+}
+
+// SetTaskWaitingInput updates a task to waiting_input status with the question
+func (s *Store) SetTaskWaitingInput(taskID, question string) error {
+	now := time.Now()
+	_, err := s.db.Exec(`
+		UPDATE tasks SET status = 'waiting_input', waiting_input_question = ?, waiting_input_since = ?, updated_at = ?
+		WHERE task_id = ?
+	`, question, now.Unix(), now.Unix(), taskID)
+	return err
+}
+
+// ClearTaskWaitingInput clears the waiting input state and returns task to in_progress
+func (s *Store) ClearTaskWaitingInput(taskID, lastCommentID string) error {
+	now := time.Now()
+	_, err := s.db.Exec(`
+		UPDATE tasks SET status = 'in_progress', waiting_input_question = '', waiting_input_since = 0,
+			last_comment_id = ?, updated_at = ?
+		WHERE task_id = ?
+	`, lastCommentID, now.Unix(), taskID)
+	return err
+}
+
+// GetTaskByAgentID finds the in_progress or waiting_input task assigned to an agent
+func (s *Store) GetTaskByAgentID(agentID string) (*TaskRecord, error) {
+	row := s.db.QueryRow(`
+		SELECT task_id, description, scope_paths, status, assigned_to, result, error, created_at, updated_at,
+			github_owner, github_repo, github_issue_number, last_comment_id, waiting_input_question, waiting_input_since, repo_root
+		FROM tasks
+		WHERE assigned_to = ? AND status IN ('in_progress', 'waiting_input')
+		ORDER BY updated_at DESC LIMIT 1
+	`, agentID)
+	return s.scanTask(row)
+}
+
+// GetAgentByWorktreePath finds the agent assigned to a worktree path
+func (s *Store) GetAgentByWorktreePath(worktreePath string) (*SpawnedAgentRecord, error) {
+	row := s.db.QueryRow(`
+		SELECT agent_id, worktree_path, pid, branch, prompt, status, created_at, updated_at, repo_root
+		FROM spawned_agents WHERE worktree_path = ?
+	`, worktreePath)
+	return s.scanSpawnedAgent(row)
+}
+
 func (s *Store) scanTask(row *sql.Row) (*TaskRecord, error) {
 	var task TaskRecord
 	var pathsJSON string
 	var assignedTo, result, taskError sql.NullString
+	var githubOwner, githubRepo, lastCommentID, waitingInputQuestion, repoRoot sql.NullString
+	var githubIssueNumber, waitingInputSince sql.NullInt64
 	var createdAt, updatedAt int64
 
 	err := row.Scan(&task.TaskID, &task.Description, &pathsJSON, &task.Status,
-		&assignedTo, &result, &taskError, &createdAt, &updatedAt)
+		&assignedTo, &result, &taskError, &createdAt, &updatedAt,
+		&githubOwner, &githubRepo, &githubIssueNumber, &lastCommentID,
+		&waitingInputQuestion, &waitingInputSince, &repoRoot)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -244,6 +417,15 @@ func (s *Store) scanTask(row *sql.Row) (*TaskRecord, error) {
 	task.Error = taskError.String
 	task.CreatedAt = time.Unix(createdAt, 0)
 	task.UpdatedAt = time.Unix(updatedAt, 0)
+	task.GitHubOwner = githubOwner.String
+	task.GitHubRepo = githubRepo.String
+	task.GitHubIssueNumber = int(githubIssueNumber.Int64)
+	task.LastCommentID = lastCommentID.String
+	task.WaitingInputQuestion = waitingInputQuestion.String
+	if waitingInputSince.Valid && waitingInputSince.Int64 > 0 {
+		task.WaitingInputSince = time.Unix(waitingInputSince.Int64, 0)
+	}
+	task.RepoRoot = repoRoot.String
 
 	return &task, nil
 }
@@ -252,10 +434,14 @@ func (s *Store) scanTaskRow(rows *sql.Rows) (*TaskRecord, error) {
 	var task TaskRecord
 	var pathsJSON string
 	var assignedTo, result, taskError sql.NullString
+	var githubOwner, githubRepo, lastCommentID, waitingInputQuestion, repoRoot sql.NullString
+	var githubIssueNumber, waitingInputSince sql.NullInt64
 	var createdAt, updatedAt int64
 
 	err := rows.Scan(&task.TaskID, &task.Description, &pathsJSON, &task.Status,
-		&assignedTo, &result, &taskError, &createdAt, &updatedAt)
+		&assignedTo, &result, &taskError, &createdAt, &updatedAt,
+		&githubOwner, &githubRepo, &githubIssueNumber, &lastCommentID,
+		&waitingInputQuestion, &waitingInputSince, &repoRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -268,6 +454,15 @@ func (s *Store) scanTaskRow(rows *sql.Rows) (*TaskRecord, error) {
 	task.Error = taskError.String
 	task.CreatedAt = time.Unix(createdAt, 0)
 	task.UpdatedAt = time.Unix(updatedAt, 0)
+	task.GitHubOwner = githubOwner.String
+	task.GitHubRepo = githubRepo.String
+	task.GitHubIssueNumber = int(githubIssueNumber.Int64)
+	task.LastCommentID = lastCommentID.String
+	task.WaitingInputQuestion = waitingInputQuestion.String
+	if waitingInputSince.Valid && waitingInputSince.Int64 > 0 {
+		task.WaitingInputSince = time.Unix(waitingInputSince.Int64, 0)
+	}
+	task.RepoRoot = repoRoot.String
 
 	return &task, nil
 }
@@ -327,40 +522,41 @@ func (s *Store) GetStats() (pendingTasks, activeTasks int, err error) {
 // CreateSpawnedAgent creates a new spawned agent record
 func (s *Store) CreateSpawnedAgent(agent *SpawnedAgentRecord) error {
 	_, err := s.db.Exec(`
-		INSERT INTO spawned_agents (agent_id, worktree_path, pid, branch, prompt, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO spawned_agents (agent_id, worktree_path, pid, branch, prompt, status, created_at, updated_at, repo_root)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, agent.AgentID, agent.WorktreePath, agent.PID, agent.Branch, agent.Prompt, agent.Status,
-		agent.CreatedAt.Unix(), agent.UpdatedAt.Unix())
+		agent.CreatedAt.Unix(), agent.UpdatedAt.Unix(), agent.RepoRoot)
 	return err
 }
 
 // GetSpawnedAgent retrieves a spawned agent by ID
 func (s *Store) GetSpawnedAgent(agentID string) (*SpawnedAgentRecord, error) {
 	row := s.db.QueryRow(`
-		SELECT agent_id, worktree_path, pid, branch, prompt, status, created_at, updated_at
+		SELECT agent_id, worktree_path, pid, branch, prompt, status, created_at, updated_at, repo_root
 		FROM spawned_agents WHERE agent_id = ?
 	`, agentID)
 
 	return s.scanSpawnedAgent(row)
 }
 
-// ListSpawnedAgents retrieves all spawned agents, optionally filtered by status
-func (s *Store) ListSpawnedAgents(statusFilter string) ([]*SpawnedAgentRecord, error) {
-	var rows *sql.Rows
-	var err error
+// ListSpawnedAgents retrieves all spawned agents, optionally filtered by status and repo
+func (s *Store) ListSpawnedAgents(statusFilter, repoRoot string) ([]*SpawnedAgentRecord, error) {
+	query := `SELECT agent_id, worktree_path, pid, branch, prompt, status, created_at, updated_at, repo_root
+		FROM spawned_agents WHERE 1=1`
+	args := []any{}
 
 	if statusFilter != "" {
-		rows, err = s.db.Query(`
-			SELECT agent_id, worktree_path, pid, branch, prompt, status, created_at, updated_at
-			FROM spawned_agents WHERE status = ? ORDER BY created_at DESC
-		`, statusFilter)
-	} else {
-		rows, err = s.db.Query(`
-			SELECT agent_id, worktree_path, pid, branch, prompt, status, created_at, updated_at
-			FROM spawned_agents ORDER BY created_at DESC
-		`)
+		query += " AND status = ?"
+		args = append(args, statusFilter)
+	}
+	if repoRoot != "" {
+		query += " AND repo_root = ?"
+		args = append(args, repoRoot)
 	}
 
+	query += " ORDER BY created_at DESC"
+
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -394,11 +590,11 @@ func (s *Store) DeleteSpawnedAgent(agentID string) error {
 
 func (s *Store) scanSpawnedAgent(row *sql.Row) (*SpawnedAgentRecord, error) {
 	var agent SpawnedAgentRecord
-	var worktreePath, branch, prompt sql.NullString
+	var worktreePath, branch, prompt, repoRoot sql.NullString
 	var createdAt, updatedAt int64
 
 	err := row.Scan(&agent.AgentID, &worktreePath, &agent.PID, &branch, &prompt,
-		&agent.Status, &createdAt, &updatedAt)
+		&agent.Status, &createdAt, &updatedAt, &repoRoot)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -411,17 +607,18 @@ func (s *Store) scanSpawnedAgent(row *sql.Row) (*SpawnedAgentRecord, error) {
 	agent.Prompt = prompt.String
 	agent.CreatedAt = time.Unix(createdAt, 0)
 	agent.UpdatedAt = time.Unix(updatedAt, 0)
+	agent.RepoRoot = repoRoot.String
 
 	return &agent, nil
 }
 
 func (s *Store) scanSpawnedAgentRow(rows *sql.Rows) (*SpawnedAgentRecord, error) {
 	var agent SpawnedAgentRecord
-	var worktreePath, branch, prompt sql.NullString
+	var worktreePath, branch, prompt, repoRoot sql.NullString
 	var createdAt, updatedAt int64
 
 	err := rows.Scan(&agent.AgentID, &worktreePath, &agent.PID, &branch, &prompt,
-		&agent.Status, &createdAt, &updatedAt)
+		&agent.Status, &createdAt, &updatedAt, &repoRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -431,6 +628,7 @@ func (s *Store) scanSpawnedAgentRow(rows *sql.Rows) (*SpawnedAgentRecord, error)
 	agent.Prompt = prompt.String
 	agent.CreatedAt = time.Unix(createdAt, 0)
 	agent.UpdatedAt = time.Unix(updatedAt, 0)
+	agent.RepoRoot = repoRoot.String
 
 	return &agent, nil
 }

@@ -59,10 +59,27 @@ func (c *Client) SubmitTask(ctx context.Context, description string, scopePaths 
 	return resp.Task, nil
 }
 
+// SubmitTaskWithGitHub creates a new task with GitHub issue source tracking
+func (c *Client) SubmitTaskWithGitHub(ctx context.Context, description string, scopePaths []string, owner, repo string, issueNumber int32, repoRoot string) (*mapv1.Task, error) {
+	resp, err := c.daemon.SubmitTask(ctx, &mapv1.SubmitTaskRequest{
+		Description:       description,
+		ScopePaths:        scopePaths,
+		GithubOwner:       owner,
+		GithubRepo:        repo,
+		GithubIssueNumber: issueNumber,
+		RepoRoot:          repoRoot,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Task, nil
+}
+
 // ListTasks returns tasks with optional filters
-func (c *Client) ListTasks(ctx context.Context, limit int32) ([]*mapv1.Task, error) {
+func (c *Client) ListTasks(ctx context.Context, limit int32, repoRoot string) ([]*mapv1.Task, error) {
 	resp, err := c.daemon.ListTasks(ctx, &mapv1.ListTasksRequest{
-		Limit: limit,
+		Limit:    limit,
+		RepoRoot: repoRoot,
 	})
 	if err != nil {
 		return nil, err
@@ -85,6 +102,25 @@ func (c *Client) GetTask(ctx context.Context, taskID string) (*mapv1.Task, error
 func (c *Client) CancelTask(ctx context.Context, taskID string) (*mapv1.Task, error) {
 	resp, err := c.daemon.CancelTask(ctx, &mapv1.CancelTaskRequest{
 		TaskId: taskID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Task, nil
+}
+
+// RequestInput signals that an agent needs user input
+func (c *Client) RequestInput(ctx context.Context, taskID, question string) (*mapv1.RequestInputResponse, error) {
+	return c.daemon.RequestInput(ctx, &mapv1.RequestInputRequest{
+		TaskId:   taskID,
+		Question: question,
+	})
+}
+
+// GetCurrentTask finds the task for a working directory
+func (c *Client) GetCurrentTask(ctx context.Context, workingDir string) (*mapv1.Task, error) {
+	resp, err := c.daemon.GetCurrentTask(ctx, &mapv1.GetCurrentTaskRequest{
+		WorkingDirectory: workingDir,
 	})
 	if err != nil {
 		return nil, err
@@ -124,8 +160,10 @@ func (c *Client) KillAgent(ctx context.Context, agentID string, force bool) (*ma
 }
 
 // ListSpawnedAgents returns all spawned agents
-func (c *Client) ListSpawnedAgents(ctx context.Context) ([]*mapv1.SpawnedAgentInfo, error) {
-	resp, err := c.daemon.ListSpawnedAgents(ctx, &mapv1.ListSpawnedAgentsRequest{})
+func (c *Client) ListSpawnedAgents(ctx context.Context, repoRoot string) ([]*mapv1.SpawnedAgentInfo, error) {
+	resp, err := c.daemon.ListSpawnedAgents(ctx, &mapv1.ListSpawnedAgentsRequest{
+		RepoRoot: repoRoot,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -142,8 +180,10 @@ func (c *Client) RespawnAgent(ctx context.Context, agentID string) (*mapv1.Respa
 // --- Worktree Methods ---
 
 // ListWorktrees returns all worktrees
-func (c *Client) ListWorktrees(ctx context.Context) ([]*mapv1.WorktreeInfo, error) {
-	resp, err := c.daemon.ListWorktrees(ctx, &mapv1.ListWorktreesRequest{})
+func (c *Client) ListWorktrees(ctx context.Context, repoRoot string) ([]*mapv1.WorktreeInfo, error) {
+	resp, err := c.daemon.ListWorktrees(ctx, &mapv1.ListWorktreesRequest{
+		RepoRoot: repoRoot,
+	})
 	if err != nil {
 		return nil, err
 	}

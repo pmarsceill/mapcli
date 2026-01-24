@@ -29,6 +29,12 @@ type SubmitTaskRequest struct {
 	ScopePaths  []string               `protobuf:"bytes,2,rep,name=scope_paths,json=scopePaths,proto3" json:"scope_paths,omitempty"`
 	// Optional: target specific agent
 	TargetAgentId string `protobuf:"bytes,3,opt,name=target_agent_id,json=targetAgentId,proto3" json:"target_agent_id,omitempty"`
+	// Optional: GitHub issue source tracking
+	GithubOwner       string `protobuf:"bytes,4,opt,name=github_owner,json=githubOwner,proto3" json:"github_owner,omitempty"`
+	GithubRepo        string `protobuf:"bytes,5,opt,name=github_repo,json=githubRepo,proto3" json:"github_repo,omitempty"`
+	GithubIssueNumber int32  `protobuf:"varint,6,opt,name=github_issue_number,json=githubIssueNumber,proto3" json:"github_issue_number,omitempty"`
+	// Repository root the task belongs to
+	RepoRoot      string `protobuf:"bytes,7,opt,name=repo_root,json=repoRoot,proto3" json:"repo_root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -80,6 +86,34 @@ func (x *SubmitTaskRequest) GetScopePaths() []string {
 func (x *SubmitTaskRequest) GetTargetAgentId() string {
 	if x != nil {
 		return x.TargetAgentId
+	}
+	return ""
+}
+
+func (x *SubmitTaskRequest) GetGithubOwner() string {
+	if x != nil {
+		return x.GithubOwner
+	}
+	return ""
+}
+
+func (x *SubmitTaskRequest) GetGithubRepo() string {
+	if x != nil {
+		return x.GithubRepo
+	}
+	return ""
+}
+
+func (x *SubmitTaskRequest) GetGithubIssueNumber() int32 {
+	if x != nil {
+		return x.GithubIssueNumber
+	}
+	return 0
+}
+
+func (x *SubmitTaskRequest) GetRepoRoot() string {
+	if x != nil {
+		return x.RepoRoot
 	}
 	return ""
 }
@@ -137,7 +171,9 @@ type ListTasksRequest struct {
 	// Optional filter by assigned agent
 	AgentFilter string `protobuf:"bytes,2,opt,name=agent_filter,json=agentFilter,proto3" json:"agent_filter,omitempty"`
 	// Limit number of results (0 = no limit)
-	Limit         int32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	Limit int32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Optional filter by repo root path (only show tasks for this repo)
+	RepoRoot      string `protobuf:"bytes,4,opt,name=repo_root,json=repoRoot,proto3" json:"repo_root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -191,6 +227,13 @@ func (x *ListTasksRequest) GetLimit() int32 {
 		return x.Limit
 	}
 	return 0
+}
+
+func (x *ListTasksRequest) GetRepoRoot() string {
+	if x != nil {
+		return x.RepoRoot
+	}
+	return ""
 }
 
 // ListTasksResponse contains the list of tasks
@@ -707,8 +750,11 @@ type SpawnAgentRequest struct {
 	// For codex: uses --dangerously-bypass-approvals-and-sandbox
 	// Default: true (agents work autonomously)
 	SkipPermissions bool `protobuf:"varint,7,opt,name=skip_permissions,json=skipPermissions,proto3" json:"skip_permissions,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Working directory - the git repository root to use for worktrees
+	// If empty, uses daemon's current directory
+	WorkingDirectory string `protobuf:"bytes,8,opt,name=working_directory,json=workingDirectory,proto3" json:"working_directory,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *SpawnAgentRequest) Reset() {
@@ -790,6 +836,13 @@ func (x *SpawnAgentRequest) GetSkipPermissions() bool {
 	return false
 }
 
+func (x *SpawnAgentRequest) GetWorkingDirectory() string {
+	if x != nil {
+		return x.WorkingDirectory
+	}
+	return ""
+}
+
 // SpawnAgentResponse returns info about spawned agents
 type SpawnAgentResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -845,7 +898,9 @@ type SpawnedAgentInfo struct {
 	CreatedAt    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	LogFile      string                 `protobuf:"bytes,6,opt,name=log_file,json=logFile,proto3" json:"log_file,omitempty"`
 	// Agent type: "claude" or "codex"
-	AgentType     string `protobuf:"bytes,7,opt,name=agent_type,json=agentType,proto3" json:"agent_type,omitempty"`
+	AgentType string `protobuf:"bytes,7,opt,name=agent_type,json=agentType,proto3" json:"agent_type,omitempty"`
+	// Repository root the agent was created from
+	RepoRoot      string `protobuf:"bytes,8,opt,name=repo_root,json=repoRoot,proto3" json:"repo_root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -925,6 +980,13 @@ func (x *SpawnedAgentInfo) GetLogFile() string {
 func (x *SpawnedAgentInfo) GetAgentType() string {
 	if x != nil {
 		return x.AgentType
+	}
+	return ""
+}
+
+func (x *SpawnedAgentInfo) GetRepoRoot() string {
+	if x != nil {
+		return x.RepoRoot
 	}
 	return ""
 }
@@ -1038,7 +1100,9 @@ func (x *KillAgentResponse) GetMessage() string {
 
 // ListSpawnedAgentsRequest requests list of spawned agents
 type ListSpawnedAgentsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Optional filter by repo root path (only show agents for this repo)
+	RepoRoot      string `protobuf:"bytes,1,opt,name=repo_root,json=repoRoot,proto3" json:"repo_root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1071,6 +1135,13 @@ func (x *ListSpawnedAgentsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListSpawnedAgentsRequest.ProtoReflect.Descriptor instead.
 func (*ListSpawnedAgentsRequest) Descriptor() ([]byte, []int) {
 	return file_map_v1_daemon_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListSpawnedAgentsRequest) GetRepoRoot() string {
+	if x != nil {
+		return x.RepoRoot
+	}
+	return ""
 }
 
 // ListSpawnedAgentsResponse returns spawned agents
@@ -1218,7 +1289,9 @@ func (x *RespawnAgentResponse) GetMessage() string {
 
 // ListWorktreesRequest requests list of worktrees
 type ListWorktreesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Optional filter by repo root path (only show worktrees for this repo)
+	RepoRoot      string `protobuf:"bytes,1,opt,name=repo_root,json=repoRoot,proto3" json:"repo_root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1251,6 +1324,13 @@ func (x *ListWorktreesRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListWorktreesRequest.ProtoReflect.Descriptor instead.
 func (*ListWorktreesRequest) Descriptor() ([]byte, []int) {
 	return file_map_v1_daemon_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ListWorktreesRequest) GetRepoRoot() string {
+	if x != nil {
+		return x.RepoRoot
+	}
+	return ""
 }
 
 // ListWorktreesResponse returns worktree info
@@ -1300,11 +1380,13 @@ func (x *ListWorktreesResponse) GetWorktrees() []*WorktreeInfo {
 
 // WorktreeInfo describes a git worktree
 type WorktreeInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
-	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
-	Branch        string                 `protobuf:"bytes,3,opt,name=branch,proto3" json:"branch,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	AgentId   string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Path      string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	Branch    string                 `protobuf:"bytes,3,opt,name=branch,proto3" json:"branch,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// Repository root the worktree was created from
+	RepoRoot      string `protobuf:"bytes,5,opt,name=repo_root,json=repoRoot,proto3" json:"repo_root,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1365,6 +1447,13 @@ func (x *WorktreeInfo) GetCreatedAt() *timestamppb.Timestamp {
 		return x.CreatedAt
 	}
 	return nil
+}
+
+func (x *WorktreeInfo) GetRepoRoot() string {
+	if x != nil {
+		return x.RepoRoot
+	}
+	return ""
 }
 
 // CleanupWorktreesRequest requests worktree cleanup
@@ -1475,22 +1564,224 @@ func (x *CleanupWorktreesResponse) GetRemovedPaths() []string {
 	return nil
 }
 
+// RequestInputRequest signals that an agent needs user input
+type RequestInputRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	Question      string                 `protobuf:"bytes,2,opt,name=question,proto3" json:"question,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestInputRequest) Reset() {
+	*x = RequestInputRequest{}
+	mi := &file_map_v1_daemon_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestInputRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestInputRequest) ProtoMessage() {}
+
+func (x *RequestInputRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_map_v1_daemon_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestInputRequest.ProtoReflect.Descriptor instead.
+func (*RequestInputRequest) Descriptor() ([]byte, []int) {
+	return file_map_v1_daemon_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *RequestInputRequest) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *RequestInputRequest) GetQuestion() string {
+	if x != nil {
+		return x.Question
+	}
+	return ""
+}
+
+// RequestInputResponse confirms the input request was processed
+type RequestInputResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestInputResponse) Reset() {
+	*x = RequestInputResponse{}
+	mi := &file_map_v1_daemon_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestInputResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestInputResponse) ProtoMessage() {}
+
+func (x *RequestInputResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_map_v1_daemon_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestInputResponse.ProtoReflect.Descriptor instead.
+func (*RequestInputResponse) Descriptor() ([]byte, []int) {
+	return file_map_v1_daemon_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *RequestInputResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *RequestInputResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+// GetCurrentTaskRequest looks up the task for a working directory
+type GetCurrentTaskRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	WorkingDirectory string                 `protobuf:"bytes,1,opt,name=working_directory,json=workingDirectory,proto3" json:"working_directory,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *GetCurrentTaskRequest) Reset() {
+	*x = GetCurrentTaskRequest{}
+	mi := &file_map_v1_daemon_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCurrentTaskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCurrentTaskRequest) ProtoMessage() {}
+
+func (x *GetCurrentTaskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_map_v1_daemon_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCurrentTaskRequest.ProtoReflect.Descriptor instead.
+func (*GetCurrentTaskRequest) Descriptor() ([]byte, []int) {
+	return file_map_v1_daemon_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *GetCurrentTaskRequest) GetWorkingDirectory() string {
+	if x != nil {
+		return x.WorkingDirectory
+	}
+	return ""
+}
+
+// GetCurrentTaskResponse returns the task for the working directory
+type GetCurrentTaskResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Task          *Task                  `protobuf:"bytes,1,opt,name=task,proto3" json:"task,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCurrentTaskResponse) Reset() {
+	*x = GetCurrentTaskResponse{}
+	mi := &file_map_v1_daemon_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCurrentTaskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCurrentTaskResponse) ProtoMessage() {}
+
+func (x *GetCurrentTaskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_map_v1_daemon_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCurrentTaskResponse.ProtoReflect.Descriptor instead.
+func (*GetCurrentTaskResponse) Descriptor() ([]byte, []int) {
+	return file_map_v1_daemon_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *GetCurrentTaskResponse) GetTask() *Task {
+	if x != nil {
+		return x.Task
+	}
+	return nil
+}
+
 var File_map_v1_daemon_proto protoreflect.FileDescriptor
 
 const file_map_v1_daemon_proto_rawDesc = "" +
 	"\n" +
-	"\x13map/v1/daemon.proto\x12\x06map.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x12map/v1/types.proto\"~\n" +
+	"\x13map/v1/daemon.proto\x12\x06map.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x12map/v1/types.proto\"\x8f\x02\n" +
 	"\x11SubmitTaskRequest\x12 \n" +
 	"\vdescription\x18\x01 \x01(\tR\vdescription\x12\x1f\n" +
 	"\vscope_paths\x18\x02 \x03(\tR\n" +
 	"scopePaths\x12&\n" +
-	"\x0ftarget_agent_id\x18\x03 \x01(\tR\rtargetAgentId\"6\n" +
+	"\x0ftarget_agent_id\x18\x03 \x01(\tR\rtargetAgentId\x12!\n" +
+	"\fgithub_owner\x18\x04 \x01(\tR\vgithubOwner\x12\x1f\n" +
+	"\vgithub_repo\x18\x05 \x01(\tR\n" +
+	"githubRepo\x12.\n" +
+	"\x13github_issue_number\x18\x06 \x01(\x05R\x11githubIssueNumber\x12\x1b\n" +
+	"\trepo_root\x18\a \x01(\tR\brepoRoot\"6\n" +
 	"\x12SubmitTaskResponse\x12 \n" +
-	"\x04task\x18\x01 \x01(\v2\f.map.v1.TaskR\x04task\"\x84\x01\n" +
+	"\x04task\x18\x01 \x01(\v2\f.map.v1.TaskR\x04task\"\xa1\x01\n" +
 	"\x10ListTasksRequest\x127\n" +
 	"\rstatus_filter\x18\x01 \x01(\x0e2\x12.map.v1.TaskStatusR\fstatusFilter\x12!\n" +
 	"\fagent_filter\x18\x02 \x01(\tR\vagentFilter\x12\x14\n" +
-	"\x05limit\x18\x03 \x01(\x05R\x05limit\"7\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12\x1b\n" +
+	"\trepo_root\x18\x04 \x01(\tR\brepoRoot\"7\n" +
 	"\x11ListTasksResponse\x12\"\n" +
 	"\x05tasks\x18\x01 \x03(\v2\f.map.v1.TaskR\x05tasks\")\n" +
 	"\x0eGetTaskRequest\x12\x17\n" +
@@ -1518,7 +1809,7 @@ const file_map_v1_daemon_proto_rawDesc = "" +
 	"typeFilter\x12!\n" +
 	"\fagent_filter\x18\x02 \x01(\tR\vagentFilter\x12\x1f\n" +
 	"\vtask_filter\x18\x03 \x01(\tR\n" +
-	"taskFilter\"\xe7\x01\n" +
+	"taskFilter\"\x94\x02\n" +
 	"\x11SpawnAgentRequest\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12\x16\n" +
 	"\x06branch\x18\x02 \x01(\tR\x06branch\x12!\n" +
@@ -1528,9 +1819,10 @@ const file_map_v1_daemon_proto_rawDesc = "" +
 	"\x06prompt\x18\x05 \x01(\tR\x06prompt\x12\x1d\n" +
 	"\n" +
 	"agent_type\x18\x06 \x01(\tR\tagentType\x12)\n" +
-	"\x10skip_permissions\x18\a \x01(\bR\x0fskipPermissions\"F\n" +
+	"\x10skip_permissions\x18\a \x01(\bR\x0fskipPermissions\x12+\n" +
+	"\x11working_directory\x18\b \x01(\tR\x10workingDirectory\"F\n" +
 	"\x12SpawnAgentResponse\x120\n" +
-	"\x06agents\x18\x01 \x03(\v2\x18.map.v1.SpawnedAgentInfoR\x06agents\"\xf1\x01\n" +
+	"\x06agents\x18\x01 \x03(\v2\x18.map.v1.SpawnedAgentInfoR\x06agents\"\x8e\x02\n" +
 	"\x10SpawnedAgentInfo\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12#\n" +
 	"\rworktree_path\x18\x02 \x01(\tR\fworktreePath\x12\x10\n" +
@@ -1540,43 +1832,59 @@ const file_map_v1_daemon_proto_rawDesc = "" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x19\n" +
 	"\blog_file\x18\x06 \x01(\tR\alogFile\x12\x1d\n" +
 	"\n" +
-	"agent_type\x18\a \x01(\tR\tagentType\"C\n" +
+	"agent_type\x18\a \x01(\tR\tagentType\x12\x1b\n" +
+	"\trepo_root\x18\b \x01(\tR\brepoRoot\"C\n" +
 	"\x10KillAgentRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x14\n" +
 	"\x05force\x18\x02 \x01(\bR\x05force\"G\n" +
 	"\x11KillAgentResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x1a\n" +
-	"\x18ListSpawnedAgentsRequest\"M\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"7\n" +
+	"\x18ListSpawnedAgentsRequest\x12\x1b\n" +
+	"\trepo_root\x18\x01 \x01(\tR\brepoRoot\"M\n" +
 	"\x19ListSpawnedAgentsResponse\x120\n" +
 	"\x06agents\x18\x01 \x03(\v2\x18.map.v1.SpawnedAgentInfoR\x06agents\"0\n" +
 	"\x13RespawnAgentRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\"J\n" +
 	"\x14RespawnAgentResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x16\n" +
-	"\x14ListWorktreesRequest\"K\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"3\n" +
+	"\x14ListWorktreesRequest\x12\x1b\n" +
+	"\trepo_root\x18\x01 \x01(\tR\brepoRoot\"K\n" +
 	"\x15ListWorktreesResponse\x122\n" +
-	"\tworktrees\x18\x01 \x03(\v2\x14.map.v1.WorktreeInfoR\tworktrees\"\x90\x01\n" +
+	"\tworktrees\x18\x01 \x03(\v2\x14.map.v1.WorktreeInfoR\tworktrees\"\xad\x01\n" +
 	"\fWorktreeInfo\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x16\n" +
 	"\x06branch\x18\x03 \x01(\tR\x06branch\x129\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"F\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1b\n" +
+	"\trepo_root\x18\x05 \x01(\tR\brepoRoot\"F\n" +
 	"\x17CleanupWorktreesRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x10\n" +
 	"\x03all\x18\x02 \x01(\bR\x03all\"d\n" +
 	"\x18CleanupWorktreesResponse\x12#\n" +
 	"\rremoved_count\x18\x01 \x01(\x05R\fremovedCount\x12#\n" +
-	"\rremoved_paths\x18\x02 \x03(\tR\fremovedPaths2\xa5\a\n" +
+	"\rremoved_paths\x18\x02 \x03(\tR\fremovedPaths\"J\n" +
+	"\x13RequestInputRequest\x12\x17\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1a\n" +
+	"\bquestion\x18\x02 \x01(\tR\bquestion\"J\n" +
+	"\x14RequestInputResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"D\n" +
+	"\x15GetCurrentTaskRequest\x12+\n" +
+	"\x11working_directory\x18\x01 \x01(\tR\x10workingDirectory\":\n" +
+	"\x16GetCurrentTaskResponse\x12 \n" +
+	"\x04task\x18\x01 \x01(\v2\f.map.v1.TaskR\x04task2\xc1\b\n" +
 	"\rDaemonService\x12C\n" +
 	"\n" +
 	"SubmitTask\x12\x19.map.v1.SubmitTaskRequest\x1a\x1a.map.v1.SubmitTaskResponse\x12@\n" +
 	"\tListTasks\x12\x18.map.v1.ListTasksRequest\x1a\x19.map.v1.ListTasksResponse\x12:\n" +
 	"\aGetTask\x12\x16.map.v1.GetTaskRequest\x1a\x17.map.v1.GetTaskResponse\x12C\n" +
 	"\n" +
-	"CancelTask\x12\x19.map.v1.CancelTaskRequest\x1a\x1a.map.v1.CancelTaskResponse\x12=\n" +
+	"CancelTask\x12\x19.map.v1.CancelTaskRequest\x1a\x1a.map.v1.CancelTaskResponse\x12I\n" +
+	"\fRequestInput\x12\x1b.map.v1.RequestInputRequest\x1a\x1c.map.v1.RequestInputResponse\x12O\n" +
+	"\x0eGetCurrentTask\x12\x1d.map.v1.GetCurrentTaskRequest\x1a\x1e.map.v1.GetCurrentTaskResponse\x12=\n" +
 	"\bShutdown\x12\x17.map.v1.ShutdownRequest\x1a\x18.map.v1.ShutdownResponse\x12@\n" +
 	"\tGetStatus\x12\x18.map.v1.GetStatusRequest\x1a\x19.map.v1.GetStatusResponse\x12:\n" +
 	"\vWatchEvents\x12\x1a.map.v1.WatchEventsRequest\x1a\r.map.v1.Event0\x01\x12C\n" +
@@ -1600,7 +1908,7 @@ func file_map_v1_daemon_proto_rawDescGZIP() []byte {
 	return file_map_v1_daemon_proto_rawDescData
 }
 
-var file_map_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_map_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_map_v1_daemon_proto_goTypes = []any{
 	(*SubmitTaskRequest)(nil),         // 0: map.v1.SubmitTaskRequest
 	(*SubmitTaskResponse)(nil),        // 1: map.v1.SubmitTaskResponse
@@ -1629,56 +1937,65 @@ var file_map_v1_daemon_proto_goTypes = []any{
 	(*WorktreeInfo)(nil),              // 24: map.v1.WorktreeInfo
 	(*CleanupWorktreesRequest)(nil),   // 25: map.v1.CleanupWorktreesRequest
 	(*CleanupWorktreesResponse)(nil),  // 26: map.v1.CleanupWorktreesResponse
-	(*Task)(nil),                      // 27: map.v1.Task
-	(TaskStatus)(0),                   // 28: map.v1.TaskStatus
-	(*timestamppb.Timestamp)(nil),     // 29: google.protobuf.Timestamp
-	(EventType)(0),                    // 30: map.v1.EventType
-	(*Event)(nil),                     // 31: map.v1.Event
+	(*RequestInputRequest)(nil),       // 27: map.v1.RequestInputRequest
+	(*RequestInputResponse)(nil),      // 28: map.v1.RequestInputResponse
+	(*GetCurrentTaskRequest)(nil),     // 29: map.v1.GetCurrentTaskRequest
+	(*GetCurrentTaskResponse)(nil),    // 30: map.v1.GetCurrentTaskResponse
+	(*Task)(nil),                      // 31: map.v1.Task
+	(TaskStatus)(0),                   // 32: map.v1.TaskStatus
+	(*timestamppb.Timestamp)(nil),     // 33: google.protobuf.Timestamp
+	(EventType)(0),                    // 34: map.v1.EventType
+	(*Event)(nil),                     // 35: map.v1.Event
 }
 var file_map_v1_daemon_proto_depIdxs = []int32{
-	27, // 0: map.v1.SubmitTaskResponse.task:type_name -> map.v1.Task
-	28, // 1: map.v1.ListTasksRequest.status_filter:type_name -> map.v1.TaskStatus
-	27, // 2: map.v1.ListTasksResponse.tasks:type_name -> map.v1.Task
-	27, // 3: map.v1.GetTaskResponse.task:type_name -> map.v1.Task
-	27, // 4: map.v1.CancelTaskResponse.task:type_name -> map.v1.Task
-	29, // 5: map.v1.GetStatusResponse.started_at:type_name -> google.protobuf.Timestamp
-	30, // 6: map.v1.WatchEventsRequest.type_filter:type_name -> map.v1.EventType
+	31, // 0: map.v1.SubmitTaskResponse.task:type_name -> map.v1.Task
+	32, // 1: map.v1.ListTasksRequest.status_filter:type_name -> map.v1.TaskStatus
+	31, // 2: map.v1.ListTasksResponse.tasks:type_name -> map.v1.Task
+	31, // 3: map.v1.GetTaskResponse.task:type_name -> map.v1.Task
+	31, // 4: map.v1.CancelTaskResponse.task:type_name -> map.v1.Task
+	33, // 5: map.v1.GetStatusResponse.started_at:type_name -> google.protobuf.Timestamp
+	34, // 6: map.v1.WatchEventsRequest.type_filter:type_name -> map.v1.EventType
 	15, // 7: map.v1.SpawnAgentResponse.agents:type_name -> map.v1.SpawnedAgentInfo
-	29, // 8: map.v1.SpawnedAgentInfo.created_at:type_name -> google.protobuf.Timestamp
+	33, // 8: map.v1.SpawnedAgentInfo.created_at:type_name -> google.protobuf.Timestamp
 	15, // 9: map.v1.ListSpawnedAgentsResponse.agents:type_name -> map.v1.SpawnedAgentInfo
 	24, // 10: map.v1.ListWorktreesResponse.worktrees:type_name -> map.v1.WorktreeInfo
-	29, // 11: map.v1.WorktreeInfo.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 12: map.v1.DaemonService.SubmitTask:input_type -> map.v1.SubmitTaskRequest
-	2,  // 13: map.v1.DaemonService.ListTasks:input_type -> map.v1.ListTasksRequest
-	4,  // 14: map.v1.DaemonService.GetTask:input_type -> map.v1.GetTaskRequest
-	6,  // 15: map.v1.DaemonService.CancelTask:input_type -> map.v1.CancelTaskRequest
-	8,  // 16: map.v1.DaemonService.Shutdown:input_type -> map.v1.ShutdownRequest
-	10, // 17: map.v1.DaemonService.GetStatus:input_type -> map.v1.GetStatusRequest
-	12, // 18: map.v1.DaemonService.WatchEvents:input_type -> map.v1.WatchEventsRequest
-	13, // 19: map.v1.DaemonService.SpawnAgent:input_type -> map.v1.SpawnAgentRequest
-	16, // 20: map.v1.DaemonService.KillAgent:input_type -> map.v1.KillAgentRequest
-	18, // 21: map.v1.DaemonService.ListSpawnedAgents:input_type -> map.v1.ListSpawnedAgentsRequest
-	20, // 22: map.v1.DaemonService.RespawnAgent:input_type -> map.v1.RespawnAgentRequest
-	22, // 23: map.v1.DaemonService.ListWorktrees:input_type -> map.v1.ListWorktreesRequest
-	25, // 24: map.v1.DaemonService.CleanupWorktrees:input_type -> map.v1.CleanupWorktreesRequest
-	1,  // 25: map.v1.DaemonService.SubmitTask:output_type -> map.v1.SubmitTaskResponse
-	3,  // 26: map.v1.DaemonService.ListTasks:output_type -> map.v1.ListTasksResponse
-	5,  // 27: map.v1.DaemonService.GetTask:output_type -> map.v1.GetTaskResponse
-	7,  // 28: map.v1.DaemonService.CancelTask:output_type -> map.v1.CancelTaskResponse
-	9,  // 29: map.v1.DaemonService.Shutdown:output_type -> map.v1.ShutdownResponse
-	11, // 30: map.v1.DaemonService.GetStatus:output_type -> map.v1.GetStatusResponse
-	31, // 31: map.v1.DaemonService.WatchEvents:output_type -> map.v1.Event
-	14, // 32: map.v1.DaemonService.SpawnAgent:output_type -> map.v1.SpawnAgentResponse
-	17, // 33: map.v1.DaemonService.KillAgent:output_type -> map.v1.KillAgentResponse
-	19, // 34: map.v1.DaemonService.ListSpawnedAgents:output_type -> map.v1.ListSpawnedAgentsResponse
-	21, // 35: map.v1.DaemonService.RespawnAgent:output_type -> map.v1.RespawnAgentResponse
-	23, // 36: map.v1.DaemonService.ListWorktrees:output_type -> map.v1.ListWorktreesResponse
-	26, // 37: map.v1.DaemonService.CleanupWorktrees:output_type -> map.v1.CleanupWorktreesResponse
-	25, // [25:38] is the sub-list for method output_type
-	12, // [12:25] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	33, // 11: map.v1.WorktreeInfo.created_at:type_name -> google.protobuf.Timestamp
+	31, // 12: map.v1.GetCurrentTaskResponse.task:type_name -> map.v1.Task
+	0,  // 13: map.v1.DaemonService.SubmitTask:input_type -> map.v1.SubmitTaskRequest
+	2,  // 14: map.v1.DaemonService.ListTasks:input_type -> map.v1.ListTasksRequest
+	4,  // 15: map.v1.DaemonService.GetTask:input_type -> map.v1.GetTaskRequest
+	6,  // 16: map.v1.DaemonService.CancelTask:input_type -> map.v1.CancelTaskRequest
+	27, // 17: map.v1.DaemonService.RequestInput:input_type -> map.v1.RequestInputRequest
+	29, // 18: map.v1.DaemonService.GetCurrentTask:input_type -> map.v1.GetCurrentTaskRequest
+	8,  // 19: map.v1.DaemonService.Shutdown:input_type -> map.v1.ShutdownRequest
+	10, // 20: map.v1.DaemonService.GetStatus:input_type -> map.v1.GetStatusRequest
+	12, // 21: map.v1.DaemonService.WatchEvents:input_type -> map.v1.WatchEventsRequest
+	13, // 22: map.v1.DaemonService.SpawnAgent:input_type -> map.v1.SpawnAgentRequest
+	16, // 23: map.v1.DaemonService.KillAgent:input_type -> map.v1.KillAgentRequest
+	18, // 24: map.v1.DaemonService.ListSpawnedAgents:input_type -> map.v1.ListSpawnedAgentsRequest
+	20, // 25: map.v1.DaemonService.RespawnAgent:input_type -> map.v1.RespawnAgentRequest
+	22, // 26: map.v1.DaemonService.ListWorktrees:input_type -> map.v1.ListWorktreesRequest
+	25, // 27: map.v1.DaemonService.CleanupWorktrees:input_type -> map.v1.CleanupWorktreesRequest
+	1,  // 28: map.v1.DaemonService.SubmitTask:output_type -> map.v1.SubmitTaskResponse
+	3,  // 29: map.v1.DaemonService.ListTasks:output_type -> map.v1.ListTasksResponse
+	5,  // 30: map.v1.DaemonService.GetTask:output_type -> map.v1.GetTaskResponse
+	7,  // 31: map.v1.DaemonService.CancelTask:output_type -> map.v1.CancelTaskResponse
+	28, // 32: map.v1.DaemonService.RequestInput:output_type -> map.v1.RequestInputResponse
+	30, // 33: map.v1.DaemonService.GetCurrentTask:output_type -> map.v1.GetCurrentTaskResponse
+	9,  // 34: map.v1.DaemonService.Shutdown:output_type -> map.v1.ShutdownResponse
+	11, // 35: map.v1.DaemonService.GetStatus:output_type -> map.v1.GetStatusResponse
+	35, // 36: map.v1.DaemonService.WatchEvents:output_type -> map.v1.Event
+	14, // 37: map.v1.DaemonService.SpawnAgent:output_type -> map.v1.SpawnAgentResponse
+	17, // 38: map.v1.DaemonService.KillAgent:output_type -> map.v1.KillAgentResponse
+	19, // 39: map.v1.DaemonService.ListSpawnedAgents:output_type -> map.v1.ListSpawnedAgentsResponse
+	21, // 40: map.v1.DaemonService.RespawnAgent:output_type -> map.v1.RespawnAgentResponse
+	23, // 41: map.v1.DaemonService.ListWorktrees:output_type -> map.v1.ListWorktreesResponse
+	26, // 42: map.v1.DaemonService.CleanupWorktrees:output_type -> map.v1.CleanupWorktreesResponse
+	28, // [28:43] is the sub-list for method output_type
+	13, // [13:28] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_map_v1_daemon_proto_init() }
@@ -1693,7 +2010,7 @@ func file_map_v1_daemon_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_map_v1_daemon_proto_rawDesc), len(file_map_v1_daemon_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   27,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
