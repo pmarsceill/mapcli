@@ -140,7 +140,7 @@ func TestTaskRouter_ListTasks(t *testing.T) {
 	}
 
 	// List all
-	all, err := router.ListTasks("", "", 0)
+	all, err := router.ListTasks("", "", "", 0)
 	if err != nil {
 		t.Fatalf("ListTasks failed: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestTaskRouter_ListTasks(t *testing.T) {
 	}
 
 	// Filter by status
-	pending, err := router.ListTasks("pending", "", 0)
+	pending, err := router.ListTasks("pending", "", "", 0)
 	if err != nil {
 		t.Fatalf("ListTasks failed: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestTaskRouter_ListTasks(t *testing.T) {
 	}
 
 	// Filter by agent
-	agentTasks, err := router.ListTasks("", "agent-1", 0)
+	agentTasks, err := router.ListTasks("", "agent-1", "", 0)
 	if err != nil {
 		t.Fatalf("ListTasks failed: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestTaskRouter_ListTasks(t *testing.T) {
 	}
 
 	// With limit
-	limited, err := router.ListTasks("", "", 2)
+	limited, err := router.ListTasks("", "", "", 2)
 	if err != nil {
 		t.Fatalf("ListTasks failed: %v", err)
 	}

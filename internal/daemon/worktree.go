@@ -25,6 +25,7 @@ type Worktree struct {
 	Path      string
 	Branch    string
 	CreatedAt time.Time
+	RepoRoot  string // source repository root the worktree was created from
 }
 
 // NewWorktreeManager creates a new worktree manager
@@ -48,19 +49,24 @@ func NewWorktreeManager(dataDir string) (*WorktreeManager, error) {
 	}, nil
 }
 
-// Create creates a new worktree for an agent
+// Create creates a new worktree for an agent using the manager's default repo root
 func (m *WorktreeManager) Create(agentID, branch string) (*Worktree, error) {
+	return m.CreateFromRepo(agentID, branch, m.repoRoot)
+}
+
+// CreateFromRepo creates a new worktree for an agent from a specific repository
+func (m *WorktreeManager) CreateFromRepo(agentID, branch, repoRoot string) (*Worktree, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.repoRoot == "" {
+	if repoRoot == "" {
 		return nil, fmt.Errorf("not in a git repository")
 	}
 
 	// Use current branch if none specified
 	if branch == "" {
 		var err error
-		branch, err = getCurrentBranch(m.repoRoot)
+		branch, err = getCurrentBranch(repoRoot)
 		if err != nil {
 			return nil, fmt.Errorf("get current branch: %w", err)
 		}
@@ -75,14 +81,14 @@ func (m *WorktreeManager) Create(agentID, branch string) (*Worktree, error) {
 
 	// Create the worktree using detached HEAD to avoid branch conflicts
 	// First, get the commit SHA for the branch
-	commitSHA, err := getCommitSHA(m.repoRoot, branch)
+	commitSHA, err := getCommitSHA(repoRoot, branch)
 	if err != nil {
 		return nil, fmt.Errorf("get commit SHA for branch %s: %w", branch, err)
 	}
 
 	// Create worktree at the commit (detached HEAD)
 	cmd := exec.Command("git", "worktree", "add", "--detach", worktreePath, commitSHA)
-	cmd.Dir = m.repoRoot
+	cmd.Dir = repoRoot
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -94,6 +100,7 @@ func (m *WorktreeManager) Create(agentID, branch string) (*Worktree, error) {
 		Path:      worktreePath,
 		Branch:    branch,
 		CreatedAt: time.Now(),
+		RepoRoot:  repoRoot,
 	}
 
 	m.worktrees[agentID] = wt

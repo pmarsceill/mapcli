@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -130,17 +131,24 @@ func runAgentCreate(cmd *cobra.Command, args []string) error {
 	// no-worktree overrides worktree
 	useWorktree := worktree && !noWorktree
 
+	// Get current working directory to pass to daemon
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("get working directory: %w", err)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	req := &mapv1.SpawnAgentRequest{
-		Count:           int32(count),
-		Branch:          branch,
-		UseWorktree:     useWorktree,
-		NamePrefix:      name,
-		Prompt:          prompt,
-		AgentType:       agentType,
-		SkipPermissions: skipPermissions,
+		Count:            int32(count),
+		Branch:           branch,
+		UseWorktree:      useWorktree,
+		NamePrefix:       name,
+		Prompt:           prompt,
+		AgentType:        agentType,
+		SkipPermissions:  skipPermissions,
+		WorkingDirectory: cwd,
 	}
 
 	resp, err := c.SpawnAgent(ctx, req)
@@ -186,7 +194,9 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	agents, err := c.ListSpawnedAgents(ctx)
+	// Filter by current repo
+	repoRoot := getRepoRoot()
+	agents, err := c.ListSpawnedAgents(ctx, repoRoot)
 	if err != nil {
 		return fmt.Errorf("list agents: %w", err)
 	}
@@ -225,7 +235,9 @@ func runAgentKill(cmd *cobra.Command, args []string) error {
 
 	// Handle --all flag
 	if killAll {
-		agents, err := c.ListSpawnedAgents(ctx)
+		// Kill all agents in current repo
+		repoRoot := getRepoRoot()
+		agents, err := c.ListSpawnedAgents(ctx, repoRoot)
 		if err != nil {
 			return fmt.Errorf("list agents: %w", err)
 		}
@@ -319,9 +331,10 @@ func runAgentRespawn(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// resolveAgentID finds an agent by exact or partial ID match
+// resolveAgentID finds an agent by exact or partial ID match in the current repo
 func resolveAgentID(ctx context.Context, c *client.Client, agentID string) (string, error) {
-	agents, err := c.ListSpawnedAgents(ctx)
+	repoRoot := getRepoRoot()
+	agents, err := c.ListSpawnedAgents(ctx, repoRoot)
 	if err != nil {
 		return "", fmt.Errorf("list agents: %w", err)
 	}

@@ -6,14 +6,15 @@ import (
 )
 
 func TestGHProjectListParsing(t *testing.T) {
+	// Test parsing the actual format returned by gh project list --format json
 	jsonData := `{
 		"projects": [
-			{"number": 1, "title": "Project Alpha"},
-			{"number": 2, "title": "Project Beta"}
+			{"number": 1, "title": "Project Alpha", "owner": {"login": "user1", "type": "User"}},
+			{"number": 2, "title": "Project Beta", "owner": {"login": "org1", "type": "Organization"}}
 		]
 	}`
 
-	var list ghProjectList
+	var list ghProjectListRaw
 	if err := json.Unmarshal([]byte(jsonData), &list); err != nil {
 		t.Fatalf("failed to parse project list: %v", err)
 	}
@@ -26,6 +27,12 @@ func TestGHProjectListParsing(t *testing.T) {
 	}
 	if list.Projects[0].Title != "Project Alpha" {
 		t.Errorf("expected title 'Project Alpha', got %q", list.Projects[0].Title)
+	}
+	if list.Projects[0].Owner.Login != "user1" {
+		t.Errorf("expected owner 'user1', got %q", list.Projects[0].Owner.Login)
+	}
+	if list.Projects[1].Owner.Login != "org1" {
+		t.Errorf("expected owner 'org1', got %q", list.Projects[1].Owner.Login)
 	}
 }
 

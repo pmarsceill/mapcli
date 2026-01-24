@@ -32,7 +32,9 @@ func runAgents(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	agents, err := c.ListSpawnedAgents(ctx)
+	// Filter by current repo
+	repoRoot := getRepoRoot()
+	agents, err := c.ListSpawnedAgents(ctx, repoRoot)
 	if err != nil {
 		return fmt.Errorf("list agents: %w", err)
 	}

@@ -53,7 +53,9 @@ func runWorktreeLs(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	worktrees, err := c.ListWorktrees(ctx)
+	// Filter by current repo
+	repoRoot := getRepoRoot()
+	worktrees, err := c.ListWorktrees(ctx, repoRoot)
 	if err != nil {
 		return fmt.Errorf("list worktrees: %w", err)
 	}

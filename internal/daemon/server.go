@@ -6,7 +6,9 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -197,7 +199,7 @@ func (s *Server) ListTasks(ctx context.Context, req *mapv1.ListTasksRequest) (*m
 		statusFilter = taskStatusToString(req.StatusFilter)
 	}
 
-	tasks, err := s.tasks.ListTasks(statusFilter, req.AgentFilter, int(req.Limit))
+	tasks, err := s.tasks.ListTasks(statusFilter, req.AgentFilter, req.GetRepoRoot(), int(req.Limit))
 	if err != nil {
 		return nil, err
 	}
@@ -305,6 +307,24 @@ func (s *Server) SpawnAgent(ctx context.Context, req *mapv1.SpawnAgentRequest) (
 
 	var agents []*mapv1.SpawnedAgentInfo
 
+	// Determine the repo root to use for worktrees
+	// Use the client's working directory if provided, otherwise fall back to daemon's
+	clientWorkDir := req.GetWorkingDirectory()
+	var repoRoot string
+	if clientWorkDir != "" {
+		// Find git repo root from the client's working directory
+		cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+		cmd.Dir = clientWorkDir
+		out, err := cmd.Output()
+		if err == nil {
+			repoRoot = strings.TrimSpace(string(out))
+		}
+	}
+	if repoRoot == "" {
+		// Fall back to daemon's repo root
+		repoRoot = s.worktrees.GetRepoRoot()
+	}
+
 	for i := 0; i < count; i++ {
 		var agentID string
 		if namePrefix != "" {
@@ -319,17 +339,20 @@ func (s *Server) SpawnAgent(ctx context.Context, req *mapv1.SpawnAgentRequest) (
 		var worktreePath string
 
 		if req.GetUseWorktree() {
-			// Create worktree for isolation
-			wt, err := s.worktrees.Create(agentID, req.GetBranch())
+			// Create worktree for isolation using the determined repo root
+			wt, err := s.worktrees.CreateFromRepo(agentID, req.GetBranch(), repoRoot)
 			if err != nil {
 				return nil, fmt.Errorf("create worktree for %s: %w", agentID, err)
 			}
 			workdir = wt.Path
 			worktreePath = wt.Path
 		} else {
-			// Use the repo root or current directory
-			workdir = s.worktrees.GetRepoRoot()
-			if workdir == "" {
+			// Use the client's working directory, repo root, or daemon's cwd
+			if clientWorkDir != "" {
+				workdir = clientWorkDir
+			} else if repoRoot != "" {
+				workdir = repoRoot
+			} else {
 				var err error
 				workdir, err = os.Getwd()
 				if err != nil {
@@ -347,7 +370,7 @@ func (s *Server) SpawnAgent(ctx context.Context, req *mapv1.SpawnAgentRequest) (
 			// Neither flag set - default to skipping permissions for autonomous operation
 			skipPermissions = true
 		}
-		slot, err := s.processes.Spawn(agentID, workdir, req.GetPrompt(), agentType, skipPermissions)
+		slot, err := s.processes.Spawn(agentID, workdir, req.GetPrompt(), agentType, repoRoot, skipPermissions)
 		if err != nil {
 			// Cleanup worktree if we created one
 			if worktreePath != "" {
@@ -367,6 +390,7 @@ func (s *Server) SpawnAgent(ctx context.Context, req *mapv1.SpawnAgentRequest) (
 			Status:       AgentStatusIdle,
 			CreatedAt:    now,
 			UpdatedAt:    now,
+			RepoRoot:     repoRoot,
 		}
 		if err := s.store.CreateSpawnedAgent(record); err != nil {
 			log.Printf("failed to store spawned agent %s: %v", agentID, err)
@@ -418,10 +442,16 @@ func (s *Server) KillAgent(ctx context.Context, req *mapv1.KillAgentRequest) (*m
 
 func (s *Server) ListSpawnedAgents(ctx context.Context, req *mapv1.ListSpawnedAgentsRequest) (*mapv1.ListSpawnedAgentsResponse, error) {
 	processes := s.processes.List()
+	repoFilter := req.GetRepoRoot()
 
 	agents := make([]*mapv1.SpawnedAgentInfo, 0, len(processes))
 	for _, sp := range processes {
-		agents = append(agents, sp.ToProto())
+		info := sp.ToProto()
+		// Filter by repo if specified
+		if repoFilter != "" && info.RepoRoot != repoFilter {
+			continue
+		}
+		agents = append(agents, info)
 	}
 
 	return &mapv1.ListSpawnedAgentsResponse{Agents: agents}, nil
@@ -460,14 +490,20 @@ func (s *Server) RespawnAgent(ctx context.Context, req *mapv1.RespawnAgentReques
 
 func (s *Server) ListWorktrees(ctx context.Context, req *mapv1.ListWorktreesRequest) (*mapv1.ListWorktreesResponse, error) {
 	worktrees := s.worktrees.List()
+	repoFilter := req.GetRepoRoot()
 
 	infos := make([]*mapv1.WorktreeInfo, 0, len(worktrees))
 	for _, wt := range worktrees {
+		// Filter by repo if specified
+		if repoFilter != "" && wt.RepoRoot != repoFilter {
+			continue
+		}
 		infos = append(infos, &mapv1.WorktreeInfo{
 			AgentId:   wt.AgentID,
 			Path:      wt.Path,
 			Branch:    wt.Branch,
 			CreatedAt: timestamppb.New(wt.CreatedAt),
+			RepoRoot:  wt.RepoRoot,
 		})
 	}
 

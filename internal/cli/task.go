@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -10,6 +11,15 @@ import (
 	mapv1 "github.com/pmarsceill/mapcli/proto/map/v1"
 	"github.com/spf13/cobra"
 )
+
+// getRepoRoot returns the git repository root for the current directory
+func getRepoRoot() string {
+	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
 
 var taskCmd = &cobra.Command{
 	Use:     "task",
@@ -98,7 +108,9 @@ func runTaskList(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	tasks, err := c.ListTasks(ctx, taskLimit)
+	// Filter by current repo
+	repoRoot := getRepoRoot()
+	tasks, err := c.ListTasks(ctx, taskLimit, repoRoot)
 	if err != nil {
 		return fmt.Errorf("list tasks: %w", err)
 	}

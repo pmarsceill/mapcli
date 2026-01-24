@@ -1,10 +1,13 @@
 package daemon
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 func setupTestStore(t *testing.T) (*Store, func()) {
@@ -141,7 +144,7 @@ func TestListTasks(t *testing.T) {
 	}
 
 	// List all
-	all, err := store.ListTasks("", "", 0)
+	all, err := store.ListTasks("", "", "", 0)
 	if err != nil {
 		t.Fatalf("ListTasks failed: %v", err)
 	}
@@ -150,7 +153,7 @@ func TestListTasks(t *testing.T) {
 	}
 
 	// Filter by status
-	pending, err := store.ListTasks("pending", "", 0)
+	pending, err := store.ListTasks("pending", "", "", 0)
 	if err != nil {
 		t.Fatalf("ListTasks failed: %v", err)
 	}
@@ -159,7 +162,7 @@ func TestListTasks(t *testing.T) {
 	}
 
 	// Filter by agent
-	agentTasks, err := store.ListTasks("", "agent-1", 0)
+	agentTasks, err := store.ListTasks("", "agent-1", "", 0)
 	if err != nil {
 		t.Fatalf("ListTasks failed: %v", err)
 	}
@@ -168,7 +171,7 @@ func TestListTasks(t *testing.T) {
 	}
 
 	// With limit
-	limited, err := store.ListTasks("", "", 2)
+	limited, err := store.ListTasks("", "", "", 2)
 	if err != nil {
 		t.Fatalf("ListTasks failed: %v", err)
 	}
@@ -456,7 +459,7 @@ func TestListSpawnedAgents(t *testing.T) {
 	}
 
 	// List all
-	all, err := store.ListSpawnedAgents("")
+	all, err := store.ListSpawnedAgents("", "")
 	if err != nil {
 		t.Fatalf("ListSpawnedAgents failed: %v", err)
 	}
@@ -465,11 +468,139 @@ func TestListSpawnedAgents(t *testing.T) {
 	}
 
 	// Filter by status
-	running, err := store.ListSpawnedAgents("running")
+	running, err := store.ListSpawnedAgents("running", "")
 	if err != nil {
 		t.Fatalf("ListSpawnedAgents failed: %v", err)
 	}
 	if len(running) != 2 {
 		t.Errorf("ListSpawnedAgents(running) returned %d agents, want 2", len(running))
+	}
+}
+
+// TestNewStore_MigratesLegacySchema verifies that NewStore can open a database
+// created with an older schema version and successfully migrate it.
+// This prevents regressions where new schema elements reference columns
+// that don't exist until migrations run.
+func TestNewStore_MigratesLegacySchema(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "mapd-test-*")
+	if err != nil {
+		t.Fatalf("create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tempDir) }()
+
+	dbPath := filepath.Join(tempDir, "mapd.db")
+
+	// Create a database with the "legacy" schema (before GitHub columns were added)
+	legacySchema := `
+CREATE TABLE IF NOT EXISTS tasks (
+	task_id TEXT PRIMARY KEY,
+	description TEXT NOT NULL,
+	scope_paths TEXT,
+	status TEXT DEFAULT 'pending',
+	assigned_to TEXT,
+	result TEXT,
+	error TEXT,
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);
+
+CREATE TABLE IF NOT EXISTS events (
+	event_id TEXT PRIMARY KEY,
+	type TEXT NOT NULL,
+	payload TEXT,
+	created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
+CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
+
+CREATE TABLE IF NOT EXISTS spawned_agents (
+	agent_id TEXT PRIMARY KEY,
+	worktree_path TEXT,
+	pid INTEGER,
+	branch TEXT,
+	prompt TEXT,
+	status TEXT DEFAULT 'running',
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_spawned_agents_status ON spawned_agents(status);
+`
+
+	// Create and populate the legacy database
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open legacy db: %v", err)
+	}
+
+	if _, err := db.Exec(legacySchema); err != nil {
+		_ = db.Close()
+		t.Fatalf("create legacy schema: %v", err)
+	}
+
+	// Insert a task using the old schema
+	now := time.Now().Unix()
+	_, err = db.Exec(`INSERT INTO tasks (task_id, description, scope_paths, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)`, "legacy-task", "A task from before migration", "[]", "pending", now, now)
+	if err != nil {
+		_ = db.Close()
+		t.Fatalf("insert legacy task: %v", err)
+	}
+
+	if err := db.Close(); err != nil {
+		t.Fatalf("close legacy db: %v", err)
+	}
+
+	// Now open the database with NewStore - this should migrate successfully
+	store, err := NewStore(tempDir)
+	if err != nil {
+		t.Fatalf("NewStore failed to migrate legacy database: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	// Verify the legacy task is still accessible
+	task, err := store.GetTask("legacy-task")
+	if err != nil {
+		t.Fatalf("GetTask failed: %v", err)
+	}
+	if task == nil {
+		t.Fatal("legacy task not found after migration")
+	}
+	if task.Description != "A task from before migration" {
+		t.Errorf("Description = %q, want %q", task.Description, "A task from before migration")
+	}
+
+	// Verify that new columns exist and work by creating a task with GitHub metadata
+	newTask := &TaskRecord{
+		TaskID:            "new-task",
+		Description:       "A task with GitHub metadata",
+		Status:            "pending",
+		GitHubOwner:       "testowner",
+		GitHubRepo:        "testrepo",
+		GitHubIssueNumber: 42,
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+	}
+	if err := store.CreateTask(newTask); err != nil {
+		t.Fatalf("CreateTask with GitHub metadata failed: %v", err)
+	}
+
+	// Verify the GitHub metadata was stored correctly
+	retrieved, err := store.GetTask("new-task")
+	if err != nil {
+		t.Fatalf("GetTask failed: %v", err)
+	}
+	if retrieved.GitHubOwner != "testowner" {
+		t.Errorf("GitHubOwner = %q, want %q", retrieved.GitHubOwner, "testowner")
+	}
+	if retrieved.GitHubRepo != "testrepo" {
+		t.Errorf("GitHubRepo = %q, want %q", retrieved.GitHubRepo, "testrepo")
+	}
+	if retrieved.GitHubIssueNumber != 42 {
+		t.Errorf("GitHubIssueNumber = %d, want 42", retrieved.GitHubIssueNumber)
 	}
 }

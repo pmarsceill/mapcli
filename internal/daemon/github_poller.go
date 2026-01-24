@@ -33,7 +33,7 @@ type ghCommentAuthor struct {
 
 // ghComment represents a GitHub issue comment
 type ghComment struct {
-	ID        int             `json:"id"`
+	ID        string          `json:"id"` // GraphQL node ID (e.g., "IC_kwDOPqDJoM7iErGE")
 	Body      string          `json:"body"`
 	Author    ghCommentAuthor `json:"author"`
 	CreatedAt string          `json:"createdAt"`
@@ -44,12 +44,21 @@ type ghIssueComments struct {
 	Comments []ghComment `json:"comments"`
 }
 
+// ghIssueState is the response from gh issue view --json state
+type ghIssueState struct {
+	State string `json:"state"` // "OPEN" or "CLOSED"
+}
+
 // inputRequestPrefix is the prefix we use when posting questions to GitHub
 const inputRequestPrefix = "**My agent needs more input:**"
 
 // tmuxPasteDelay is the delay after sending text to tmux before sending Enter
 // This allows long pastes to be processed before submission
-const tmuxPasteDelay = 300 * time.Millisecond
+const tmuxPasteDelay = 1 * time.Second
+
+// tmuxEnterDelay is the delay between Enter key presses
+// Long pastes show as "[Pasted text #1 +N lines]" and need Enter to expand, then another to submit
+const tmuxEnterDelay = 500 * time.Millisecond
 
 // NewGitHubPoller creates a new GitHub poller
 func NewGitHubPoller(store *Store, processes *ProcessManager, eventCh chan *mapv1.Event) *GitHubPoller {
@@ -93,15 +102,24 @@ func (p *GitHubPoller) poll() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// Get all tasks waiting for input
-	tasks, err := p.store.ListTasksWaitingInput()
+	// Get all tasks waiting for input and check for responses
+	waitingTasks, err := p.store.ListTasksWaitingInput()
 	if err != nil {
 		log.Printf("github poller: failed to list waiting tasks: %v", err)
-		return
+	} else {
+		for _, task := range waitingTasks {
+			p.checkTaskForResponse(task)
+		}
 	}
 
-	for _, task := range tasks {
-		p.checkTaskForResponse(task)
+	// Get all in_progress tasks with GitHub sources and check if issues are closed
+	inProgressTasks, err := p.store.ListTasksInProgressWithGitHub()
+	if err != nil {
+		log.Printf("github poller: failed to list in_progress tasks: %v", err)
+	} else {
+		for _, task := range inProgressTasks {
+			p.checkTaskForClosedIssue(task)
+		}
 	}
 }
 
@@ -136,11 +154,8 @@ func (p *GitHubPoller) checkTaskForResponse(task *TaskRecord) {
 		}
 
 		// Skip if we've already processed this comment
-		if task.LastCommentID != "" {
-			lastID, _ := strconv.Atoi(task.LastCommentID)
-			if c.ID <= lastID {
-				continue
-			}
+		if task.LastCommentID != "" && c.ID == task.LastCommentID {
+			continue
 		}
 
 		// Found a new human comment
@@ -162,7 +177,7 @@ func (p *GitHubPoller) checkTaskForResponse(task *TaskRecord) {
 	}
 
 	// Update task status back to in_progress
-	if err := p.store.ClearTaskWaitingInput(task.TaskID, strconv.Itoa(newComment.ID)); err != nil {
+	if err := p.store.ClearTaskWaitingInput(task.TaskID, newComment.ID); err != nil {
 		log.Printf("github poller: failed to update task status: %v", err)
 		return
 	}
@@ -196,6 +211,76 @@ func (p *GitHubPoller) fetchGitHubComments(owner, repo string, issueNumber int) 
 	return result.Comments, nil
 }
 
+func (p *GitHubPoller) checkTaskForClosedIssue(task *TaskRecord) {
+	state, err := p.fetchGitHubIssueState(task.GitHubOwner, task.GitHubRepo, task.GitHubIssueNumber)
+	if err != nil {
+		log.Printf("github poller: failed to fetch issue state for %s/%s#%d: %v",
+			task.GitHubOwner, task.GitHubRepo, task.GitHubIssueNumber, err)
+		return
+	}
+
+	if state == "CLOSED" {
+		log.Printf("github poller: issue %s/%s#%d is closed, marking task %s as completed",
+			task.GitHubOwner, task.GitHubRepo, task.GitHubIssueNumber, task.TaskID)
+
+		// Mark the task as completed
+		if err := p.store.UpdateTaskStatus(task.TaskID, "completed"); err != nil {
+			log.Printf("github poller: failed to mark task %s as completed: %v", task.TaskID, err)
+			return
+		}
+
+		// Emit completion event
+		p.emitTaskCompletedEvent(task)
+	}
+}
+
+func (p *GitHubPoller) fetchGitHubIssueState(owner, repo string, issueNumber int) (string, error) {
+	args := []string{
+		"issue", "view", strconv.Itoa(issueNumber),
+		"--repo", fmt.Sprintf("%s/%s", owner, repo),
+		"--json", "state",
+	}
+
+	out, err := exec.Command("gh", args...).Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("gh issue view failed: %s", string(exitErr.Stderr))
+		}
+		return "", fmt.Errorf("gh issue view failed: %w", err)
+	}
+
+	var result ghIssueState
+	if err := json.Unmarshal(out, &result); err != nil {
+		return "", fmt.Errorf("parse issue state: %w", err)
+	}
+
+	return result.State, nil
+}
+
+func (p *GitHubPoller) emitTaskCompletedEvent(task *TaskRecord) {
+	if p.eventCh == nil {
+		return
+	}
+
+	event := &mapv1.Event{
+		EventId:   uuid.New().String(),
+		Type:      mapv1.EventType_EVENT_TYPE_TASK_COMPLETED,
+		Timestamp: timestamppb.Now(),
+		Payload: &mapv1.Event_Task{
+			Task: &mapv1.TaskEvent{
+				TaskId:    task.TaskID,
+				NewStatus: mapv1.TaskStatus_TASK_STATUS_COMPLETED,
+				AgentId:   task.AssignedTo,
+			},
+		},
+	}
+
+	select {
+	case p.eventCh <- event:
+	default:
+	}
+}
+
 func (p *GitHubPoller) deliverResponseToAgent(task *TaskRecord, response string) error {
 	if task.AssignedTo == "" {
 		return fmt.Errorf("task has no assigned agent")
@@ -222,10 +307,20 @@ func (p *GitHubPoller) deliverResponseToAgent(task *TaskRecord, response string)
 	// Wait for pasted text to be processed (long text shows as collapsed paste)
 	time.Sleep(tmuxPasteDelay)
 
-	// Send Enter to confirm/submit
+	// Send Enter twice for long pastes:
+	// 1st Enter: confirms/expands the collapsed paste preview
+	// 2nd Enter: submits the prompt to the CLI
 	cmd = exec.Command("tmux", "send-keys", "-t", tmuxSession, "Enter")
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to send Enter: %w", err)
+		return fmt.Errorf("failed to send first Enter: %w", err)
+	}
+
+	// Wait for paste to expand before sending second Enter
+	time.Sleep(tmuxEnterDelay)
+
+	cmd = exec.Command("tmux", "send-keys", "-t", tmuxSession, "Enter")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to send second Enter: %w", err)
 	}
 
 	return nil

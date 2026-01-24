@@ -34,6 +34,7 @@ type AgentSlot struct {
 	Status       string // "idle", "busy"
 	CurrentTask  string // current task ID if busy
 	AgentType    string // "claude" or "codex"
+	RepoRoot     string // git repository root the agent was spawned from
 
 	mu sync.Mutex
 }
@@ -73,7 +74,8 @@ func (m *ProcessManager) SetOnAgentAvailable(callback func()) {
 // CreateSlot creates a new agent with a tmux session running claude or codex
 // agentType should be "claude" (default) or "codex"
 // If skipPermissions is true, the agent is started with permission-bypassing flags
-func (m *ProcessManager) CreateSlot(agentID, workdir, agentType string, skipPermissions bool) (*AgentSlot, error) {
+// repoRoot is the git repository root the agent was spawned from
+func (m *ProcessManager) CreateSlot(agentID, workdir, agentType, repoRoot string, skipPermissions bool) (*AgentSlot, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -153,6 +155,7 @@ func (m *ProcessManager) CreateSlot(agentID, workdir, agentType string, skipPerm
 		CreatedAt:    time.Now(),
 		Status:       AgentStatusIdle,
 		AgentType:    agentType,
+		RepoRoot:     repoRoot,
 	}
 
 	m.agents[agentID] = slot
@@ -235,11 +238,23 @@ func (m *ProcessManager) ExecuteTask(ctx context.Context, agentID string, taskID
 	// Long text may show as "[Pasted text #1 +N lines]" and need confirmation
 	time.Sleep(tmuxPasteDelay)
 
-	// Send Enter key to confirm/submit the prompt
-	// For long pastes, this confirms the paste; for short text, this submits
+	// Send Enter key twice for long pastes:
+	// 1st Enter: confirms/expands the collapsed paste preview
+	// 2nd Enter: submits the prompt to the CLI
+	// For short pastes, the first Enter submits and the second is harmless
 	cmd = exec.CommandContext(ctx, "tmux", "send-keys", "-t", tmuxSession, "Enter")
 	if err := cmd.Run(); err != nil {
-		log.Printf("agent %s task %s failed to send Enter: %v", agentID, taskID, err)
+		log.Printf("agent %s task %s failed to send first Enter: %v", agentID, taskID, err)
+		return "", fmt.Errorf("failed to confirm paste in tmux: %w", err)
+	}
+
+	// Wait for paste to expand before sending second Enter
+	time.Sleep(tmuxEnterDelay)
+
+	// Second Enter to submit the prompt
+	cmd = exec.CommandContext(ctx, "tmux", "send-keys", "-t", tmuxSession, "Enter")
+	if err := cmd.Run(); err != nil {
+		log.Printf("agent %s task %s failed to send second Enter: %v", agentID, taskID, err)
 		return "", fmt.Errorf("failed to submit task to tmux: %w", err)
 	}
 
@@ -423,6 +438,7 @@ func (slot *AgentSlot) ToProto() *mapv1.SpawnedAgentInfo {
 		CreatedAt:    timestamppb.New(slot.CreatedAt),
 		LogFile:      slot.TmuxSession, // Repurpose LogFile to show tmux session
 		AgentType:    slot.AgentType,
+		RepoRoot:     slot.RepoRoot,
 	}
 }
 
@@ -456,16 +472,18 @@ func (m *ProcessManager) emitAgentEvent(slot *AgentSlot, connected bool) {
 // Spawn creates a slot and optionally sends an initial prompt
 // agentType should be "claude" (default) or "codex"
 // If skipPermissions is true, the agent is started with permission-bypassing flags
-func (m *ProcessManager) Spawn(agentID, workdir, prompt, agentType string, skipPermissions bool) (*AgentSlot, error) {
-	slot, err := m.CreateSlot(agentID, workdir, agentType, skipPermissions)
+// repoRoot is the git repository root the agent was spawned from
+func (m *ProcessManager) Spawn(agentID, workdir, prompt, agentType, repoRoot string, skipPermissions bool) (*AgentSlot, error) {
+	slot, err := m.CreateSlot(agentID, workdir, agentType, repoRoot, skipPermissions)
 	if err != nil {
 		return nil, err
 	}
 
 	// If a prompt was provided, send it to the tmux session
 	if prompt != "" {
-		// Give the agent a moment to start up
-		time.Sleep(500 * time.Millisecond)
+		// Give the agent time to fully start up and be ready for input
+		// Claude Code needs ~2s to initialize its UI
+		time.Sleep(2 * time.Second)
 
 		// Replace newlines with spaces to keep as single-line input
 		singleLinePrompt := strings.ReplaceAll(prompt, "\n", " ")
@@ -479,12 +497,22 @@ func (m *ProcessManager) Spawn(agentID, workdir, prompt, agentType string, skipP
 			// Wait for pasted text to be processed (long text shows as collapsed paste)
 			time.Sleep(tmuxPasteDelay)
 
-			// Send Enter to confirm/submit
+			// Send Enter twice for long pastes:
+			// 1st Enter: confirms/expands the collapsed paste preview
+			// 2nd Enter: submits the prompt to the CLI
 			cmd = exec.Command("tmux", "send-keys", "-t", slot.TmuxSession, "Enter")
 			if err := cmd.Run(); err != nil {
-				log.Printf("warning: failed to send Enter to %s: %v", agentID, err)
+				log.Printf("warning: failed to send first Enter to %s: %v", agentID, err)
 			} else {
-				log.Printf("sent initial prompt to agent %s", agentID)
+				// Wait for paste to expand before sending second Enter
+				time.Sleep(tmuxEnterDelay)
+
+				cmd = exec.Command("tmux", "send-keys", "-t", slot.TmuxSession, "Enter")
+				if err := cmd.Run(); err != nil {
+					log.Printf("warning: failed to send second Enter to %s: %v", agentID, err)
+				} else {
+					log.Printf("sent initial prompt to agent %s", agentID)
+				}
 			}
 		}
 	}

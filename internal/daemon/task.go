@@ -47,6 +47,7 @@ func (r *TaskRouter) SubmitTask(ctx context.Context, req *mapv1.SubmitTaskReques
 		GitHubOwner:       req.GetGithubOwner(),
 		GitHubRepo:        req.GetGithubRepo(),
 		GitHubIssueNumber: int(req.GetGithubIssueNumber()),
+		RepoRoot:          req.GetRepoRoot(),
 	}
 
 	if err := r.store.CreateTask(record); err != nil {
@@ -99,7 +100,8 @@ func (r *TaskRouter) ProcessPendingTasks() {
 	defer r.mu.Unlock()
 
 	// Get pending tasks ordered by creation time (oldest first)
-	pendingTasks, err := r.store.ListTasks("pending", "", 0)
+	// No repo filter here - process all pending tasks
+	pendingTasks, err := r.store.ListTasks("pending", "", "", 0)
 	if err != nil {
 		return
 	}
@@ -173,8 +175,8 @@ func (r *TaskRouter) GetTask(taskID string) (*mapv1.Task, error) {
 }
 
 // ListTasks retrieves tasks with optional filters
-func (r *TaskRouter) ListTasks(statusFilter, agentFilter string, limit int) ([]*mapv1.Task, error) {
-	records, err := r.store.ListTasks(statusFilter, agentFilter, limit)
+func (r *TaskRouter) ListTasks(statusFilter, agentFilter, repoRoot string, limit int) ([]*mapv1.Task, error) {
+	records, err := r.store.ListTasks(statusFilter, agentFilter, repoRoot, limit)
 	if err != nil {
 		return nil, err
 	}
